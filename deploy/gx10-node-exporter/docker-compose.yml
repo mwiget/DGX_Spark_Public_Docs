@@ -1,0 +1,26 @@
+# Host telemetry for the DGX Spark — runs on gx10, scraped by Prometheus on lake1.
+# Feeds the CPU / memory / disk / network panels of the dashboard.
+#
+# Deploy:  scp -r this dir to gx10, then `docker compose up -d`
+
+name: dgx-spark-node-exporter
+
+services:
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    container_name: dgxspark-node-exporter
+    restart: unless-stopped
+    # host networking so the exporter reports the real host interfaces, and so
+    # :9100 is reachable from lake1 over Tailscale without extra port mapping.
+    network_mode: host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host
+      - --web.listen-address=:9100
+      # Ignore container/overlay pseudo-filesystems so the mountpoint panels
+      # show real disks rather than one row per docker layer.
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+|var/lib/kubelet/.+|host/var/lib/docker/.+)($$|/)

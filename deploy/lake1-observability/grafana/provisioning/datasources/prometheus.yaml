@@ -1,0 +1,15 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    # This UID is pinned on purpose. The upstream dashboard hardcodes
+    # "dfr1d9ottv8xsc" in ~72 places; matching it here means the dashboard file
+    # stays byte-identical to upstream and `git merge upstream/main` stays clean.
+    uid: dfr1d9ottv8xsc
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 5s
+      httpMethod: POST
