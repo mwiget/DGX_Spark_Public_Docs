@@ -181,3 +181,36 @@ Expect a ~34 s first request after every restart. Warm requests settle at 61 tok
 
 The speculative-decoding panels read `0` permanently with this model — see the
 note above. Everything else populates under load.
+
+## Running Claude Code against it
+
+```bash
+ln -s "$PWD/deploy/claude-spark" ~/bin/claude-spark   # matches ../claude-local
+claude-spark                    # in any repo, like `claude`
+claude-spark -p "..."           # headless
+BACKEND=lake1 claude-spark      # the llama-server stack in ../claude-local
+```
+
+`claude-spark` health-checks the server, starts `claude-spark-shim.py` on
+127.0.0.1:8016 if it is not already up, and execs `claude`. See COMPARISON.md
+for why the shim is needed — Claude Code puts a `role="system"` message inside
+the messages array, which vLLM's `/v1/messages` rejects.
+
+It is normally invoked through a `~/bin` symlink, so the script resolves its own
+path with `readlink -f`; without that it would look for the shim next to the
+link rather than next to itself.
+
+## Disk
+
+The NVFP4 checkpoints are large. Currently on gx10:
+
+| Path | Size | |
+|---|---:|---|
+| `~/models/Qwen3-Coder-Next-NVFP4-GB10` | 43 GB | in use |
+| `~/models/mtp-Qwen3.8-27B-Q4_0.gguf` | 1.3 GB | llama.cpp MTP draft, from ../claude-local |
+| `~/models/qwen3.8-cc.jinja` | 12 KB | patched Claude Code template, from ../claude-local |
+
+The Qwen3.8-27B NVFP4 checkpoints were deleted after benchmarking (41 GB
+reclaimed). To redo that comparison, re-download
+`sakamakismile/Qwen3.8-27B-MTP-NVFP4` — the only one of three that loads, and
+only with `VLLM_NVFP4_GEMM_BACKEND=cutlass`. See COMPARISON.md.

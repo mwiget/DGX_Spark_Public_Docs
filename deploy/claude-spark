@@ -14,7 +14,9 @@
 # vLLM. To go back:  ssh gx10 sudo systemctl enable --now ollama  (stop vLLM first)
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve through symlinks — this is normally invoked as ~/bin/claude-spark,
+# and the shim lives next to the real script, not next to the link.
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 SHIM_PORT="${SHIM_PORT:-8016}"
 
 case "${BACKEND:-gx10}" in
