@@ -81,7 +81,73 @@ Q8 matters more than speed, lake1 remains the better box.
   ~19k tokens, and vLLM's fp8 path is not llama.cpp's. Not disproven at the ~107k
   depths real turns reach. If output degrades on long sessions, drop
   `--kv-cache-dtype fp8` first.
-- **Speculative decoding is unavailable**, where lake1 gets +115% from MTP.
-  The checkpoint ships no MTP weights, and ngram crashes the engine under
-  concurrency (`gdn_attn.py` assert) — see README.md. This is the one place the
-  llama.cpp stack is strictly ahead.
+- **Speculative decoding is unavailable on Coder-Next**, where lake1 gets +115%
+  from MTP. The checkpoint ships no MTP weights, and ngram crashes the engine
+  under concurrency (`gdn_attn.py` assert) — see below.
+
+## Speculative decoding on GB10 — measured, three ways
+
+All on gx10, identical harness, `max_num_seqs=64`.
+
+| | Coder-Next<br>no spec | Coder-Next<br>+ ngram | Qwen3.8-27B<br>+ MTP |
+|---|---:|---:|---:|
+| Active params | ~3B | ~3B | 27.3B |
+| Edit prompt (1 stream) | 61.2 tok/s | **126.4** | 20.7 |
+| From-scratch (1 stream) | 64.5 tok/s | 61.1 | 21.4 |
+| Concurrency 4 | 156.1 agg | **engine died** | 72.1 agg (4/4) |
+| Concurrency 8 | **288.2 agg** | not reached | 135.1 agg (8/8) |
+| Draft acceptance | — | 37.2% | **69.4%** |
+| Acceptance by position | — | 52/36/31/29% | **84/68/56%** |
+
+### MTP does work under concurrency; ngram does not
+
+The `gdn_attn.py` assertion that killed ngram —
+`assert not (num_decodes > 0 and num_spec_decodes > 0)` — fires on *mixed*
+batches. ngram drafts **opportunistically** (only when an n-gram matches), so a
+batch contains both drafting and non-drafting sequences: the forbidden mix. MTP
+drafts **unconditionally**, so no mix arises. Qwen3.8-27B is also a hybrid
+attention model (48 linear + 16 full), and it ran 8/8 concurrent cleanly.
+
+So hybrid attention does not rule out speculative decoding — *conditional*
+drafting does.
+
+### MTP's acceptance is far better, and it still loses
+
+69.4% overall vs ngram's 37.2%, and much flatter by position (84/68/56 vs
+52/36/31/29) — MTP predicts any token, ngram only repeated spans. It is the
+better speculative method by a wide margin.
+
+It still loses on absolute throughput, because it is attached to a model with
+**9x the active parameters**. Decode on GB10 is bandwidth-bound in active params,
+and a ~2x speculative win cannot close a 9x gap:
+
+    Coder-Next  ~3B active, no spec   ->  64.5 tok/s
+    Qwen3.8-27B 27.3B active, +MTP    ->  21.4 tok/s
+
+This is the same scaling law as the table above, and it holds *through* a
+working speculative decoder. On a bandwidth-starved box, picking a sparser model
+beats adding speculation to a denser one.
+
+### Getting an MTP-capable 27B to load at all
+
+Three NVFP4 repos of the same model failed in `avarok:v23`, each differently.
+Check all three before spending 20 GB of download:
+
+| Repo | Failure |
+|---|---|
+| `unsloth/Qwen3.8-27B-NVFP4` | compressed-tensors `actorder=static` with `strategy=tensor_group` |
+| `RadixArk/Qwen3.8-27B-NVFP4` | ModelOpt `quant_algo=MIXED_PRECISION`, not in vLLM's supported list |
+| `sakamakismile/Qwen3.8-27B-MTP-NVFP4` | loads — **but only with `VLLM_NVFP4_GEMM_BACKEND=cutlass`** |
+
+The last is a kernel constraint, not config: with `marlin` (which the Coder-Next
+model card specifies) it dies on `size_n = 96 is not divisible by tile_n_size = 64`.
+Backend options are cutlass, flashinfer-cutlass, flashinfer-trtllm,
+flashinfer-cudnn, fbgemm, marlin, emulation. Metadata alone cannot predict this
+one — only the first two are checkable ahead of time.
+
+## Verdict
+
+Keep **Qwen3-Coder-Next NVFP4 with no speculative decoding** on gx10. It is the
+fastest option measured here at every concurrency level, it is the
+coding-specialised model, and it is stable. The llama.cpp stack on lake1 remains
+ahead on single-stream decode (76.2 tok/s) and on quant fidelity (Q8 vs NVFP4).

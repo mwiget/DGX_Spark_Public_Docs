@@ -18,11 +18,24 @@ MAX_TRIES="${MAX_TRIES:-40}"
 export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-0}"
 
 mkdir -p "$MODEL_DIR"
-dest="$MODEL_DIR/$(basename "$REPO")"
+dest="${DEST:-$MODEL_DIR/$(basename "$REPO")}"
+
+# Two orgs can publish the same basename (unsloth/Qwen3.8-27B-NVFP4 and
+# RadixArk/Qwen3.8-27B-NVFP4 both land in .../Qwen3.8-27B-NVFP4), which silently
+# merges two checkpoints into one directory — 43 GB of half-and-half that still
+# looks plausible. Stamp the source and refuse to mix.
+marker="$dest/.hf-repo"
+if [ -f "$marker" ] && [ "$(cat "$marker")" != "$REPO" ]; then
+  echo "ERROR: $dest already holds $(cat "$marker"), not $REPO" >&2
+  echo "  remove it, or set DEST=<other path>" >&2
+  exit 1
+fi
+mkdir -p "$dest" && printf '%s\n' "$REPO" > "$marker"
 
 for try in $(seq 1 "$MAX_TRIES"); do
   echo "=== $(date -Is) attempt $try/$MAX_TRIES ==="
   if "$HF" download "$REPO" --local-dir "$dest" --max-workers 4; then
+    printf '%s\n' "$REPO" > "$marker"
     echo "=== $(date -Is) download complete ==="
     exit 0
   fi

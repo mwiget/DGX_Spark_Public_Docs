@@ -1,4 +1,4 @@
-# Alternative model: Qwen3.8-27B-NVFP4 with real MTP speculative decoding.
+# Alternative model: Qwen3.8-27B-MTP-NVFP4 with real MTP speculative decoding.
 #
 # Runs on the SAME port 8006 as the Coder-Next stack so the Grafana dashboard
 # works against whichever is up. They cannot run simultaneously — each reserves
@@ -8,6 +8,17 @@
 #
 # Unlike Qwen3-Coder-Next, this checkpoint ships MTP weights (15 tensors:
 # mtp.fc.weight, mtp.layers.0.*), so method="mtp" has a draft head to load.
+#
+# Quant choice is NOT free — two other Qwen3.8-27B NVFP4 repos fail to load in
+# avarok:v23, each for a different reason:
+#   unsloth/Qwen3.8-27B-NVFP4  -> compressed-tensors actorder=static with
+#       strategy=tensor_group: "Must use group quantization strategy in order
+#       to apply activation ordering"
+#   RadixArk/Qwen3.8-27B-NVFP4 -> ModelOpt quant_algo=MIXED_PRECISION, not in
+#       vLLM's supported list [FP8, FP8_PER_CHANNEL_PER_TOKEN, FP8_PB_WO,
+#       NVFP4, MXFP8]
+# This one is compressed-tensors / nvfp4-pack-quantized with no actorder.
+# Check both failure modes before downloading 20 GB of a new quant.
 
 name: dgx-spark-vllm-27b
 
@@ -21,13 +32,19 @@ services:
     ports:
       - "8006:8000"
     volumes:
-      - ${MODEL_DIR:-/home/mwiget/models}/Qwen3.8-27B-NVFP4:/models/Qwen3.8-27B-NVFP4:ro
+      - ${MODEL_DIR:-/home/mwiget/models}/Qwen3.8-27B-MTP-NVFP4:/models/Qwen3.8-27B-MTP-NVFP4:ro
     environment:
-      VLLM_NVFP4_GEMM_BACKEND: marlin
+      # NOT marlin. This checkpoint has a layer with output dim 96, and the
+      # Marlin NVFP4 kernel tiles at 64:
+      #   RuntimeError: size_n = 96 is not divisible by tile_n_size = 64
+      # marlin comes from the Coder-Next model card and does not transfer here.
+      # Valid values: cutlass, flashinfer-cutlass, flashinfer-trtllm,
+      # flashinfer-cudnn, fbgemm, marlin, emulation.
+      VLLM_NVFP4_GEMM_BACKEND: cutlass
       VLLM_TEST_FORCE_FP8_MARLIN: "1"
       VLLM_USE_FLASHINFER_MOE_FP4: "0"
       VLLM_MARLIN_USE_ATOMIC_ADD: "1"
-      MODEL: /models/Qwen3.8-27B-NVFP4
+      MODEL: /models/Qwen3.8-27B-MTP-NVFP4
       PORT: "8000"
       MAX_MODEL_LEN: "262144"
       MAX_NUM_SEQS: "64"
