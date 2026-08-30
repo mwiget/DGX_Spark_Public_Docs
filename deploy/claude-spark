@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Run Claude Code against the vLLM Qwen3-Coder-Next NVFP4 server on gx10.
+#
+#   claude-spark                  # in any repo, like `claude`
+#   claude-spark -p "..."         # headless
+#   BACKEND=lake1 claude-spark    # llama-server on lake1 instead (../claude-local)
+#
+# Companion to ../claude-local/claude-local, which drives llama-server. The vLLM
+# server is a systemd unit on gx10 and comes back on boot:
+#   ssh gx10 systemctl status vllm-coder-next
+#   ssh gx10 sudo systemctl restart vllm-coder-next
+#
+# ollama on gx10 is stopped and DISABLED: it cannot share the unified pool with
+# vLLM. To go back:  ssh gx10 sudo systemctl enable --now ollama  (stop vLLM first)
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SHIM_PORT="${SHIM_PORT:-8016}"
+
+case "${BACKEND:-gx10}" in
+  gx10)
+    VLLM=http://gx10:8006
+    MODEL=qwen3-coder-next
+    HINT="ssh gx10 sudo systemctl start vllm-coder-next"
+
+    if ! curl -sf -m 5 "$VLLM/health" >/dev/null 2>&1; then
+      echo "no vLLM server at $VLLM" >&2
+      echo "  try: $HINT" >&2
+      exit 1
+    fi
+
+    # Claude Code puts a role="system" message INSIDE the messages array. vLLM's
+    # /v1/messages follows the Anthropic spec, where system is a top-level field
+    # and messages may only be user/assistant, so it 400s. The shim hoists those
+    # messages out. Same class of bug as the Jinja "System message must be at the
+    # beginning" issue in ../claude-local, but it happens at request validation,
+    # so no chat template can fix it.
+    if ! curl -sf -m 3 "http://127.0.0.1:$SHIM_PORT/health" >/dev/null 2>&1; then
+      echo "starting shim on 127.0.0.1:$SHIM_PORT -> $VLLM" >&2
+      setsid nohup "$HERE/claude-spark-shim.py" \
+        --listen "127.0.0.1:$SHIM_PORT" --upstream "$VLLM" \
+        >/tmp/claude-spark-shim.log 2>&1 < /dev/null &
+      for _ in $(seq 1 25); do
+        curl -sf -m 2 "http://127.0.0.1:$SHIM_PORT/health" >/dev/null 2>&1 && break
+        sleep 0.2
+      done
+      if ! curl -sf -m 3 "http://127.0.0.1:$SHIM_PORT/health" >/dev/null 2>&1; then
+        echo "shim failed to start; see /tmp/claude-spark-shim.log" >&2
+        exit 1
+      fi
+    fi
+    HOST="http://127.0.0.1:$SHIM_PORT"
+    # Claude Code does not recognise this model name and would assume a 200k
+    # window, auto-compacting early. The served model is 262144.
+    export CLAUDE_CODE_MAX_CONTEXT_TOKENS=262144
+    ;;
+
+  lake1)
+    # The llama-server stack from ../claude-local. It has its own template fix,
+    # so it needs no shim.
+    HOST=http://127.0.0.1:8090
+    MODEL=qwen3.8-27b-q8
+    if ! curl -sf -m 5 "$HOST/health" >/dev/null 2>&1; then
+      echo "no llama-server at $HOST" >&2
+      echo "  try: sudo systemctl start llama-server" >&2
+      exit 1
+    fi
+    ;;
+
+  *) echo "unknown BACKEND: $BACKEND (gx10|lake1)" >&2; exit 1 ;;
+esac
+
+unset ANTHROPIC_API_KEY
+export ANTHROPIC_AUTH_TOKEN=local
+export ANTHROPIC_BASE_URL="$HOST"
+export ANTHROPIC_MODEL="$MODEL"
+export ANTHROPIC_SMALL_FAST_MODEL="$MODEL"
+
+# The single highest-value line here, carried over from ../claude-local:
+# Claude Code's attribution header changes every turn, changing the prompt
+# prefix, which busts the prefix cache on every request (~90% slower). Measured
+# on this server: a 64k-token turn is 21.9s cold vs 0.80s warm.
+export CLAUDE_CODE_ATTRIBUTION_HEADER=0
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+
+exec claude "$@"

@@ -30,12 +30,30 @@ services:
       MODEL: /models/Qwen3-Coder-Next-NVFP4-GB10
       PORT: "8000"
       MAX_MODEL_LEN: "262144"
+      # The entrypoint always emits --max-num-seqs, so set it here rather than
+      # in VLLM_EXTRA_ARGS — otherwise the flag appears twice on the command line.
+      MAX_NUM_SEQS: "64"
       # NOT the model card's 0.90. GB10 memory is unified, so the host's own
       # ~20 GiB (k3s, FRR, other containers) comes out of the same 121.63 GiB
       # pool: only ~101 GiB is free at startup, and 0.90 (109.46 GiB) makes vLLM
       # abort with "Free memory on device cuda:0 ... is less than desired".
       # Ceiling is ~0.83; 0.80 leaves headroom for host memory to fluctuate.
       GPU_MEMORY_UTIL: "0.80"
+      # The entrypoint does `exec ${VLLM_CMD}` with an UNQUOTED expansion and no
+      # eval, so every argument here is split on whitespace and quote characters
+      # pass through literally. The --speculative-config JSON must therefore stay
+      # compact with no spaces, and must NOT be wrapped in quotes.
+      #
+      # DO NOT enable --speculative-config with this model. Measured here:
+      # ngram gives 2.07x on code-editing prompts (126 vs 61 tok/s) at
+      # concurrency 1, but Qwen3-Next's Gated DeltaNet attention backend cannot
+      # mix speculative and non-speculative decodes in one batch:
+      #   gdn_attn.py: assert not (num_decodes > 0 and num_spec_decodes > 0)
+      #   AssertionError: num_decodes: 2, num_spec_decodes: 2 -> EngineDeadError
+      # That kills the whole engine, not just the request, as soon as a second
+      # request overlaps. This checkpoint also has zero MTP/nextn tensors, so
+      # qwen3_next_mtp is unavailable too. Spec decoding needs a different model.
+      #
       # NB: a SERVED_MODEL_NAME env var is ignored by this image — without the
       # flag below, /v1/models reports the id as "/models/Qwen3-Coder-Next-NVFP4-GB10"
       # and clients have to send that full path as the model name.
@@ -46,7 +64,6 @@ services:
         --enable-prefix-caching
         --enable-chunked-prefill
         --max-num-batched-tokens 8192
-        --max-num-seqs 64
         --enable-auto-tool-choice
         --tool-call-parser qwen3_coder
     # The image ships a healthcheck hardcoded to port 8888, which never matches

@@ -1,0 +1,58 @@
+# Alternative model: Qwen3.8-27B-NVFP4 with real MTP speculative decoding.
+#
+# Runs on the SAME port 8006 as the Coder-Next stack so the Grafana dashboard
+# works against whichever is up. They cannot run simultaneously — each reserves
+# 0.80 of the unified pool. Switch with:
+#   docker compose -f docker-compose.yml down
+#   docker compose -f docker-compose.qwen38-27b.yml up -d
+#
+# Unlike Qwen3-Coder-Next, this checkpoint ships MTP weights (15 tensors:
+# mtp.fc.weight, mtp.layers.0.*), so method="mtp" has a draft head to load.
+
+name: dgx-spark-vllm-27b
+
+services:
+  vllm:
+    image: avarok/dgx-vllm-nvfp4-kernel:v23
+    container_name: dgxspark-vllm-27b
+    restart: unless-stopped
+    ipc: host
+    shm_size: 32gb
+    ports:
+      - "8006:8000"
+    volumes:
+      - ${MODEL_DIR:-/home/mwiget/models}/Qwen3.8-27B-NVFP4:/models/Qwen3.8-27B-NVFP4:ro
+    environment:
+      VLLM_NVFP4_GEMM_BACKEND: marlin
+      VLLM_TEST_FORCE_FP8_MARLIN: "1"
+      VLLM_USE_FLASHINFER_MOE_FP4: "0"
+      VLLM_MARLIN_USE_ATOMIC_ADD: "1"
+      MODEL: /models/Qwen3.8-27B-NVFP4
+      PORT: "8000"
+      MAX_MODEL_LEN: "262144"
+      MAX_NUM_SEQS: "64"
+      GPU_MEMORY_UTIL: "0.80"
+      # Compact JSON, unquoted — the entrypoint does `exec ${VLLM_CMD}` with an
+      # unquoted expansion and no eval, so spaces would shatter the argument.
+      # --language-model-only: the config carries a vision_config; we serve text.
+      VLLM_EXTRA_ARGS: >-
+        --served-model-name qwen3.8-27b
+        --language-model-only
+        --kv-cache-dtype fp8
+        --enable-prefix-caching
+        --enable-chunked-prefill
+        --max-num-batched-tokens 8192
+        --speculative-config {"method":"mtp","num_speculative_tokens":3}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15m
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
