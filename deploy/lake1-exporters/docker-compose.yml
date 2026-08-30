@@ -1,17 +1,17 @@
-# Host telemetry for the DGX Spark — runs on gx10, scraped by Prometheus on lake1.
-# Feeds the CPU / memory / disk / network panels of the dashboard.
+# Host and GPU telemetry for lake1 (RTX PRO 5000 Blackwell, 48 GB, sm_120).
 #
-# Deploy:  scp -r this dir to gx10, then `docker compose up -d`
+# Feeds the "lake1 · llama.cpp" dashboard, alongside llama-server's own
+# /metrics (which needs --metrics on the server — see deploy/README.md).
+#
+#   docker compose -f deploy/lake1-exporters/docker-compose.yml up -d
 
-name: dgx-spark-node-exporter
+name: lake1-exporters
 
 services:
   node-exporter:
     image: prom/node-exporter:v1.12.1
-    container_name: dgxspark-node-exporter
+    container_name: lake1-node-exporter
     restart: unless-stopped
-    # host networking so the exporter reports the real host interfaces, and so
-    # :9100 is reachable from lake1 over Tailscale without extra port mapping.
     network_mode: host
     pid: host
     volumes:
@@ -21,8 +21,6 @@ services:
       - --path.sysfs=/host/sys
       - --path.rootfs=/host
       - --web.listen-address=:9100
-      # Ignore container/overlay pseudo-filesystems so the mountpoint panels
-      # show real disks rather than one row per docker layer.
       # An unreachable NFS/CIFS mount makes the filesystem collector block. At a
       # 5s scrape interval those pile up until node_exporter hits its 40-request
       # ceiling and every scrape returns "Limit of concurrent requests reached",
@@ -30,3 +28,22 @@ services:
       # network filesystems keeps host telemetry alive through a NAS outage.
       - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|nfs|nfs4|cifs|smb3|fuse\..*)$
       - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+|var/lib/kubelet/.+|host/var/lib/docker/.+)($$|/)
+
+  # nvidia_gpu_exporter shells out to nvidia-smi, so it works on consumer and
+  # workstation cards. DCGM-exporter targets datacenter GPUs and is a heavier
+  # dependency for a single RTX PRO card.
+  nvidia-gpu-exporter:
+    image: utkuozdemir/nvidia_gpu_exporter:1.3.2
+    container_name: lake1-gpu-exporter
+    restart: unless-stopped
+    ports:
+      - "9835:9835"
+    # Needs the driver libs and device nodes to run nvidia-smi.
+    devices:
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+      - /dev/nvidia-modeset:/dev/nvidia-modeset
+    volumes:
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
+      - /usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:ro
