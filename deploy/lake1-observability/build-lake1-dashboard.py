@@ -124,38 +124,76 @@ y[0] += 8
 
 L = "llamacpp:"
 row("llama.cpp — Qwen3.8-27B Q8 + MTP (../claude-local)")
-stat("PROMPT TOK/S", f"avg({L}prompt_tokens_seconds) or vector(0)", "short",
-     desc="Prefill rate. ~1372 tok/s measured at 100k cold in ../claude-local.")
-stat("DECODE TOK/S", f"avg({L}predicted_tokens_seconds) or vector(0)", "short",
-     desc="With MTP speculative decoding: 35.5 -> 76.2 tok/s.")
-stat("KV CACHE USED", f"100 * (avg({L}kv_cache_usage_ratio) or vector(0))", "percent",
-     thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 85},
-                 {"color": RED, "value": 95}])
+# Derived from counters, NOT the *_tokens_seconds gauges: those report only
+# during active generation and read 0 whenever the server is idle, which makes
+# them useless on a dashboard you look at after the fact.
+stat("PREFILL TOK/S",
+     f"sum(rate({L}prompt_tokens_total[$__rate_interval])) / "
+     f"clamp_min(sum(rate({L}prompt_seconds_total[$__rate_interval])), 0.001)", "short",
+     desc="Prompt tokens per second of prefill time. ~1372 tok/s at 100k cold "
+          "in ../claude-local; small prompts read much lower.")
+stat("DECODE TOK/S",
+     f"sum(rate({L}tokens_predicted_total[$__rate_interval])) / "
+     f"clamp_min(sum(rate({L}tokens_predicted_seconds_total[$__rate_interval])), 0.001)", "short",
+     desc="Generated tokens per second of generation time. With MTP: "
+          "35.5 -> 76.2 tok/s in ../claude-local.")
+# NB: llama.cpp exposes NO kv_cache_* metrics (unlike vLLM). Prefix-cache reuse
+# is the equivalent signal, and it is the one that matters here: ../claude-local
+# measures 0.31s warm vs 73s for a 100k cold prefill.
+stat("PREFIX CACHE HIT RATE",
+     f"100 * ((sum({L}prompt_tokens_cached_total) or vector(0)) / "
+     f"clamp_min((sum({L}prompt_tokens_cached_total) or vector(0)) + "
+     f"(sum({L}prompt_tokens_total) or vector(0)), 1))", "percent",
+     desc="Cached / (cached + processed). prompt_tokens_total EXCLUDES cached "
+          "tokens, so the two sum to the total prompt volume.",
+     thresholds=[{"color": RED, "value": None}, {"color": AMBER, "value": 40},
+                 {"color": GREEN, "value": 70}])
+stat("MTP ACCEPTANCE",
+     f"100 * ((sum({L}spec_decode_num_accepted_tokens_total) or vector(0)) / "
+     f"clamp_min(sum({L}spec_decode_num_draft_tokens_total) or vector(0), 1))", "percent",
+     desc="Draft tokens accepted by the target model. Compare with the DGX Spark "
+          "dashboard: vLLM ngram managed 37.2%, vLLM MTP 69.4%.",
+     thresholds=[{"color": RED, "value": None}, {"color": AMBER, "value": 40},
+                 {"color": GREEN, "value": 60}])
 stat("REQUESTS PROCESSING", f"sum({L}requests_processing) or vector(0)", "short")
 stat("REQUESTS DEFERRED", f"sum({L}requests_deferred) or vector(0)", "short",
      desc="Non-zero means both slots are busy and requests are queueing.",
      thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 1}])
-stat("KV CACHE TOKENS", f"sum({L}kv_cache_tokens) or vector(0)", "short")
 y[0] += 4
 
 ts("THROUGHPUT",
-   [(f"avg({L}prompt_tokens_seconds) or vector(0)", "prompt tok/s"),
-    (f"avg({L}predicted_tokens_seconds) or vector(0)", "decode tok/s")], "short",
-   colors={"prompt tok/s": BLUE, "decode tok/s": GREEN})
-ts("TOKENS PROCESSED (RATE)",
-   [(f"sum(rate({L}prompt_tokens_total[$__rate_interval])) or vector(0)", "prompt"),
-    (f"sum(rate({L}tokens_predicted_total[$__rate_interval])) or vector(0)", "predicted")],
-   "short", colors={"prompt": BLUE, "predicted": GREEN})
+   [(f"sum(rate({L}tokens_predicted_total[$__rate_interval])) / "
+     f"clamp_min(sum(rate({L}tokens_predicted_seconds_total[$__rate_interval])), 0.001)",
+     "decode tok/s"),
+    (f"sum(rate({L}prompt_tokens_total[$__rate_interval])) / "
+     f"clamp_min(sum(rate({L}prompt_seconds_total[$__rate_interval])), 0.001)",
+     "prefill tok/s")], "short",
+   colors={"prefill tok/s": BLUE, "decode tok/s": GREEN},
+   desc="Counter-derived. The llamacpp:*_tokens_seconds gauges report only "
+        "during active generation and sit at 0 when idle.")
+ts("PREFIX CACHE: REUSED vs PROCESSED",
+   [(f"sum(rate({L}prompt_tokens_cached_total[$__rate_interval])) or vector(0)", "reused/s"),
+    (f"sum(rate({L}prompt_tokens_total[$__rate_interval])) or vector(0)", "processed/s")],
+   "short", colors={"reused/s": GREEN, "processed/s": AMBER},
+   desc="Reused high and processed near zero is a warm cache — the 0.31s turn.")
 y[0] += 8
 
+ts("MTP SPECULATIVE DECODING",
+   [(f"100 * ((sum(rate({L}spec_decode_num_accepted_tokens_total[$__rate_interval])) or vector(0)) / "
+     f"clamp_min(sum(rate({L}spec_decode_num_draft_tokens_total[$__rate_interval])) or vector(0), 1))",
+     "acceptance %"),
+    (f"(sum(rate({L}spec_decode_num_draft_tokens_total[$__rate_interval])) or vector(0)) / "
+     f"clamp_min(sum(rate({L}spec_decode_num_drafts_total[$__rate_interval])) or vector(0), 1)",
+     "draft tokens per step")],
+   "short", colors={"acceptance %": GREEN, "draft tokens per step": BLUE},
+   desc="serve-lake1.sh uses --spec-draft-n-max 2, so draft tokens per step "
+        "tops out at 2. Acceptance is the lever: it took decode 35.5 -> 76.2 tok/s.")
 ts("SLOTS / QUEUE",
    [(f"sum({L}requests_processing) or vector(0)", "processing"),
     (f"sum({L}requests_deferred) or vector(0)", "deferred"),
     (f"avg({L}n_busy_slots_per_decode) or vector(0)", "busy slots per decode")],
-   "short", colors={"processing": GREEN, "deferred": RED})
-ts("KV CACHE",
-   [(f"100 * (avg({L}kv_cache_usage_ratio) or vector(0))", "usage %")],
-   "percent", maxv=100, colors={"usage %": GREEN})
+   "short", colors={"processing": GREEN, "deferred": RED},
+   desc="Two slots of 131k. deferred > 0 means both are busy.")
 y[0] += 8
 
 row("Host — lake1")

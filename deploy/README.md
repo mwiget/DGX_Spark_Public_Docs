@@ -223,19 +223,45 @@ on its own — the stuck requests are never released. Both exporters now set
 `--collector.filesystem.fs-types-exclude=...|nfs|nfs4|cifs|smb3|fuse\..*` and the
 node/GPU jobs scrape at 15s with a 10s timeout instead of the global 5s.
 
-### llama.cpp metrics — not yet enabled
+### llama.cpp metrics
 
-The `llamacpp` scrape target is **down** by design. `llama-server` needs two
-changes in `../claude-local/serve-lake1.sh`, and both require a restart:
+llama.cpp has a built-in Prometheus endpoint — no exporter needed. It required
+two changes in `../claude-local/serve-lake1.sh` plus a restart:
 
-1. `--metrics` — without it the endpoint returns
-   `501 This server does not support metrics endpoint. Start it with --metrics`
-2. a bind address the Prometheus container can reach — it currently listens on
-   `127.0.0.1` only, which a bridged container cannot reach even via
-   `host-gateway`
+```diff
+- --alias qwen3.8-27b-q8 --host 127.0.0.1 --port 8090 \
++ --alias qwen3.8-27b-q8 --host 0.0.0.0 --port 8090 --metrics \
+```
 
-The dashboard's llama.cpp panels are already built and use `or vector(0)`
-fallbacks, so they render `0` rather than "No data" until this is done.
+`--metrics` because the endpoint otherwise returns `501 ... Start it with
+--metrics`, and the bind because a bridged Prometheus container cannot reach the
+host loopback even via `host-gateway`. **This exposes 8090 on the LAN/tailnet** —
+the same posture as the gx10 llama-server and gx10 vLLM, but it is a change;
+firewall the port if that is not wanted.
+
+**llama.cpp exposes no `kv_cache_*` metrics** (vLLM does). The equivalent signal
+is `prompt_tokens_cached_total` — prefix-cache reuse — and it is the one that
+matters, since ../claude-local measures 0.31s warm vs 73s for a 100k cold
+prefill. `prompt_tokens_total` *excludes* cached tokens, so hit rate is
+`cached / (cached + total)`.
+
+It does expose **MTP speculative-decoding counters**, which the vLLM dashboard
+can be compared against directly. Measured on lake1 immediately after enabling:
+
+| | |
+|---|---:|
+| MTP acceptance | **93.9%** |
+| Draft tokens per step | 1.84 (capped at 2 by `--spec-draft-n-max 2`) |
+| Decode, counter-derived | 74.8 tok/s |
+
+For reference, on gx10: vLLM MTP reached 69.4% acceptance and vLLM ngram 37.2%.
+Different models and implementations, so this is not a like-for-like ranking.
+
+**Use the counters, not the `*_tokens_seconds` gauges.** Those gauges report only
+during active generation and read 0 whenever the server is idle, so a dashboard
+built on them looks broken between requests. The panels derive throughput as
+`rate(tokens_predicted_total) / rate(tokens_predicted_seconds_total)`, which is
+correct over any window.
 
 ## Running Claude Code against it
 

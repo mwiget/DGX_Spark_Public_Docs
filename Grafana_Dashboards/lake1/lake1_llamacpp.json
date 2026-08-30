@@ -993,8 +993,8 @@
     {
       "id": 15,
       "type": "stat",
-      "title": "PROMPT TOK/S",
-      "description": "Prefill rate. ~1372 tok/s measured at 100k cold in ../claude-local.",
+      "title": "PREFILL TOK/S",
+      "description": "Prompt tokens per second of prefill time. ~1372 tok/s at 100k cold in ../claude-local; small prompts read much lower.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1011,7 +1011,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(llamacpp:prompt_tokens_seconds) or vector(0)",
+          "expr": "sum(rate(llamacpp:prompt_tokens_total[$__rate_interval])) / clamp_min(sum(rate(llamacpp:prompt_seconds_total[$__rate_interval])), 0.001)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1051,7 +1051,7 @@
       "id": 16,
       "type": "stat",
       "title": "DECODE TOK/S",
-      "description": "With MTP speculative decoding: 35.5 -> 76.2 tok/s.",
+      "description": "Generated tokens per second of generation time. With MTP: 35.5 -> 76.2 tok/s in ../claude-local.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1068,7 +1068,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(llamacpp:predicted_tokens_seconds) or vector(0)",
+          "expr": "sum(rate(llamacpp:tokens_predicted_total[$__rate_interval])) / clamp_min(sum(rate(llamacpp:tokens_predicted_seconds_total[$__rate_interval])), 0.001)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1107,8 +1107,8 @@
     {
       "id": 17,
       "type": "stat",
-      "title": "KV CACHE USED",
-      "description": "",
+      "title": "PREFIX CACHE HIT RATE",
+      "description": "Cached / (cached + processed). prompt_tokens_total EXCLUDES cached tokens, so the two sum to the total prompt volume.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1125,7 +1125,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * (avg(llamacpp:kv_cache_usage_ratio) or vector(0))",
+          "expr": "100 * ((sum(llamacpp:prompt_tokens_cached_total) or vector(0)) / clamp_min((sum(llamacpp:prompt_tokens_cached_total) or vector(0)) + (sum(llamacpp:prompt_tokens_total) or vector(0)), 1))",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1152,16 +1152,16 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#76B900",
+                "color": "#F2495C",
                 "value": null
               },
               {
                 "color": "#FF9830",
-                "value": 85
+                "value": 40
               },
               {
-                "color": "#F2495C",
-                "value": 95
+                "color": "#76B900",
+                "value": 70
               }
             ]
           }
@@ -1172,6 +1172,71 @@
     {
       "id": 18,
       "type": "stat",
+      "title": "MTP ACCEPTANCE",
+      "description": "Draft tokens accepted by the target model. Compare with the DGX Spark dashboard: vLLM ngram managed 37.2%, vLLM MTP 69.4%.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfr1d9ottv8xsc"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "100 * ((sum(llamacpp:spec_decode_num_accepted_tokens_total) or vector(0)) / clamp_min(sum(llamacpp:spec_decode_num_draft_tokens_total) or vector(0), 1))",
+          "legendFormat": "",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#F2495C",
+                "value": null
+              },
+              {
+                "color": "#FF9830",
+                "value": 40
+              },
+              {
+                "color": "#76B900",
+                "value": 60
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 19,
+      "type": "stat",
       "title": "REQUESTS PROCESSING",
       "description": "",
       "datasource": {
@@ -1181,7 +1246,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 12,
+        "x": 16,
         "y": 30
       },
       "targets": [
@@ -1227,7 +1292,7 @@
       }
     },
     {
-      "id": 19,
+      "id": 20,
       "type": "stat",
       "title": "REQUESTS DEFERRED",
       "description": "Non-zero means both slots are busy and requests are queueing.",
@@ -1238,7 +1303,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 16,
+        "x": 20,
         "y": 30
       },
       "targets": [
@@ -1288,67 +1353,10 @@
       }
     },
     {
-      "id": 20,
-      "type": "stat",
-      "title": "KV CACHE TOKENS",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "dfr1d9ottv8xsc"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 20,
-        "y": 30
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "dfr1d9ottv8xsc"
-          },
-          "expr": "sum(llamacpp:kv_cache_tokens) or vector(0)",
-          "legendFormat": "",
-          "refId": "A",
-          "range": true
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "textMode": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#76B900",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
       "id": 21,
       "type": "timeseries",
       "title": "THROUGHPUT",
-      "description": "",
+      "description": "Counter-derived. The llamacpp:*_tokens_seconds gauges report only during active generation and sit at 0 when idle.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1365,8 +1373,8 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(llamacpp:prompt_tokens_seconds) or vector(0)",
-          "legendFormat": "prompt tok/s",
+          "expr": "sum(rate(llamacpp:tokens_predicted_total[$__rate_interval])) / clamp_min(sum(rate(llamacpp:tokens_predicted_seconds_total[$__rate_interval])), 0.001)",
+          "legendFormat": "decode tok/s",
           "refId": "A",
           "range": true
         },
@@ -1375,8 +1383,8 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(llamacpp:predicted_tokens_seconds) or vector(0)",
-          "legendFormat": "decode tok/s",
+          "expr": "sum(rate(llamacpp:prompt_tokens_total[$__rate_interval])) / clamp_min(sum(rate(llamacpp:prompt_seconds_total[$__rate_interval])), 0.001)",
+          "legendFormat": "prefill tok/s",
           "refId": "B",
           "range": true
         }
@@ -1410,7 +1418,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "prompt tok/s"
+              "options": "prefill tok/s"
             },
             "properties": [
               {
@@ -1443,8 +1451,8 @@
     {
       "id": 22,
       "type": "timeseries",
-      "title": "TOKENS PROCESSED (RATE)",
-      "description": "",
+      "title": "PREFIX CACHE: REUSED vs PROCESSED",
+      "description": "Reused high and processed near zero is a warm cache \u2014 the 0.31s turn.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1461,8 +1469,8 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:prompt_tokens_total[$__rate_interval])) or vector(0)",
-          "legendFormat": "prompt",
+          "expr": "sum(rate(llamacpp:prompt_tokens_cached_total[$__rate_interval])) or vector(0)",
+          "legendFormat": "reused/s",
           "refId": "A",
           "range": true
         },
@@ -1471,8 +1479,8 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:tokens_predicted_total[$__rate_interval])) or vector(0)",
-          "legendFormat": "predicted",
+          "expr": "sum(rate(llamacpp:prompt_tokens_total[$__rate_interval])) or vector(0)",
+          "legendFormat": "processed/s",
           "refId": "B",
           "range": true
         }
@@ -1506,22 +1514,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "prompt"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#5794F2"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "predicted"
+              "options": "reused/s"
             },
             "properties": [
               {
@@ -1532,6 +1525,21 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "processed/s"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
           }
         ]
       }
@@ -1539,8 +1547,8 @@
     {
       "id": 23,
       "type": "timeseries",
-      "title": "SLOTS / QUEUE",
-      "description": "",
+      "title": "MTP SPECULATIVE DECODING",
+      "description": "serve-lake1.sh uses --spec-draft-n-max 2, so draft tokens per step tops out at 2. Acceptance is the lever: it took decode 35.5 -> 76.2 tok/s.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1549,6 +1557,102 @@
         "h": 8,
         "w": 12,
         "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "100 * ((sum(rate(llamacpp:spec_decode_num_accepted_tokens_total[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(llamacpp:spec_decode_num_draft_tokens_total[$__rate_interval])) or vector(0), 1))",
+          "legendFormat": "acceptance %",
+          "refId": "A",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "(sum(rate(llamacpp:spec_decode_num_draft_tokens_total[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(llamacpp:spec_decode_num_drafts_total[$__rate_interval])) or vector(0), 1)",
+          "legendFormat": "draft tokens per step",
+          "refId": "B",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "acceptance %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#76B900"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "draft tokens per step"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "SLOTS / QUEUE",
+      "description": "Two slots of 131k. deferred > 0 means both are busy.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfr1d9ottv8xsc"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
         "y": 42
       },
       "targets": [
@@ -1635,79 +1739,6 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#F2495C"
-                }
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "id": 24,
-      "type": "timeseries",
-      "title": "KV CACHE",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "dfr1d9ottv8xsc"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 42
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "dfr1d9ottv8xsc"
-          },
-          "expr": "100 * (avg(llamacpp:kv_cache_usage_ratio) or vector(0))",
-          "legendFormat": "usage %",
-          "refId": "A",
-          "range": true
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          },
-          "max": 100,
-          "min": 0
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "usage %"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#76B900"
                 }
               }
             ]
