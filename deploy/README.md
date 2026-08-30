@@ -120,7 +120,21 @@ ssh gx10 'sudo cp ~/dgx-spark-obs/vllm/vllm-coder-next.service /etc/systemd/syst
 | | Model card | Here | Why |
 |---|---|---|---|
 | Port | 8000 | **8006** | matches the upstream README's scrape target |
-| `GPU_MEMORY_UTIL` | 0.90 | **0.90** | ollama is stopped + disabled, so the memory is free |
+| `GPU_MEMORY_UTIL` | 0.90 | **0.80** | see below — 0.90 does not fit on this host |
+| healthcheck | port 8888 | port 8000 | the image's baked-in check probes a port we never serve on |
+
+**0.90 does not work here, even with ollama stopped.** GB10 memory is unified, so
+the host's own footprint (k3s, FRR, the other containers — roughly 20 GiB) comes
+out of the same 121.63 GiB pool. Only ~101 GiB is free at startup, so vLLM aborts:
+
+```
+ValueError: Free memory on device cuda:0 (101.28/121.63 GiB) on startup is less
+than desired GPU memory utilization (0.9, 109.46 GiB).
+```
+
+The ceiling is ~0.83. We use **0.80** for headroom, which still leaves ~54 GiB
+of KV cache after the 42.7 GiB of weights. Raising it means freeing host memory
+first, not just stopping ollama.
 
 ollama was disabled to free unified memory for vLLM:
 
