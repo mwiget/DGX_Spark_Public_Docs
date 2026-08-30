@@ -28,7 +28,6 @@ services:
       VLLM_USE_FLASHINFER_MOE_FP4: "0"
       VLLM_MARLIN_USE_ATOMIC_ADD: "1"
       MODEL: /models/Qwen3-Coder-Next-NVFP4-GB10
-      SERVED_MODEL_NAME: qwen3-coder-next
       PORT: "8000"
       MAX_MODEL_LEN: "262144"
       # NOT the model card's 0.90. GB10 memory is unified, so the host's own
@@ -37,7 +36,11 @@ services:
       # abort with "Free memory on device cuda:0 ... is less than desired".
       # Ceiling is ~0.83; 0.80 leaves headroom for host memory to fluctuate.
       GPU_MEMORY_UTIL: "0.80"
+      # NB: a SERVED_MODEL_NAME env var is ignored by this image — without the
+      # flag below, /v1/models reports the id as "/models/Qwen3-Coder-Next-NVFP4-GB10"
+      # and clients have to send that full path as the model name.
       VLLM_EXTRA_ARGS: >-
+        --served-model-name qwen3-coder-next
         --kv-cache-dtype fp8
         --attention-backend flashinfer
         --enable-prefix-caching

@@ -122,6 +122,11 @@ ssh gx10 'sudo cp ~/dgx-spark-obs/vllm/vllm-coder-next.service /etc/systemd/syst
 | Port | 8000 | **8006** | matches the upstream README's scrape target |
 | `GPU_MEMORY_UTIL` | 0.90 | **0.80** | see below — 0.90 does not fit on this host |
 | healthcheck | port 8888 | port 8000 | the image's baked-in check probes a port we never serve on |
+| model name | env var | `--served-model-name` | the image **ignores** `SERVED_MODEL_NAME` |
+
+Without the `--served-model-name qwen3-coder-next` flag, `/v1/models` reports the
+id as `/models/Qwen3-Coder-Next-NVFP4-GB10` and every client has to send that
+full path. Setting the `SERVED_MODEL_NAME` env var does nothing.
 
 **0.90 does not work here, even with ollama stopped.** GB10 memory is unified, so
 the host's own footprint (k3s, FRR, the other containers — roughly 20 GiB) comes
@@ -161,3 +166,18 @@ SPARK_POWER_W=240 ELECTRICITY_RATE_KWH=0.27 ./import-dashboard.sh
 Those are the current defaults (upstream ships 240 W at $0.151/kWh). The script
 fails loudly if the upstream energy expression changes shape, rather than
 silently importing an unpatched dashboard.
+
+## Measured on this deployment
+
+| | |
+|---|---|
+| Model load time | ~330 s from a cold container |
+| First request after load | ~34 s (CUDA graph capture; not representative) |
+| Warm decode | **61 tok/s** (model card claims 62) |
+| Context | 262,144 tokens |
+| GPU memory util | 0.80 — see the note above on why not 0.90 |
+
+Expect a ~34 s first request after every restart. Warm requests settle at 61 tok/s.
+
+The speculative-decoding panels read `0` permanently with this model — see the
+note above. Everything else populates under load.
