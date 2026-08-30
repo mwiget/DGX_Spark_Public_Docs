@@ -207,10 +207,11 @@ The NVFP4 checkpoints are large. Currently on gx10:
 | Path | Size | |
 |---|---:|---|
 | `~/models/Qwen3-Coder-Next-NVFP4-GB10` | 43 GB | in use |
-| `~/models/mtp-Qwen3.8-27B-Q4_0.gguf` | 1.3 GB | llama.cpp MTP draft, from ../claude-local |
 | `~/models/qwen3.8-cc.jinja` | 12 KB | patched Claude Code template, from ../claude-local |
 
-The Qwen3.8-27B NVFP4 checkpoints were deleted after benchmarking (41 GB
-reclaimed). To redo that comparison, re-download
+229 GB free. The two Qwen3.8-27B NVFP4 checkpoints were deleted after
+benchmarking, along with the gx10 copy of `mtp-Qwen3.8-27B-Q4_0.gguf` — 42 GB
+reclaimed. The lake1 copy of that GGUF is untouched and still backs
+`serve-lake1.sh` in ../claude-local. To redo the 27B comparison, re-download
 `sakamakismile/Qwen3.8-27B-MTP-NVFP4` — the only one of three that loads, and
 only with `VLLM_NVFP4_GEMM_BACKEND=cutlass`. See COMPARISON.md.
