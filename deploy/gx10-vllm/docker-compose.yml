@@ -1,0 +1,51 @@
+# vLLM serving Qwen3-Coder-Next-NVFP4 on the DGX Spark (GB10 / SM121).
+#
+# Image is a third-party community build (vLLM 0.16.0-rc2 with custom NVFP4
+# kernels) — it is what the model card specifies and what the GB10 community
+# uses; there is no NGC vLLM image with these kernels for GB10.
+#
+# Deployed to ~/dgx-spark-obs/vllm on gx10 and managed by vllm-coder-next.service.
+
+name: dgx-spark-vllm
+
+services:
+  vllm:
+    image: avarok/dgx-vllm-nvfp4-kernel:v23
+    container_name: dgxspark-vllm
+    restart: unless-stopped
+    ipc: host
+    shm_size: 32gb
+    ports:
+      # Host 8006 matches the upstream README's documented scrape target,
+      # so prometheus.yml on lake1 needs no change.
+      - "8006:8000"
+    volumes:
+      - ${MODEL_DIR:-/home/mwiget/models}/Qwen3-Coder-Next-NVFP4-GB10:/models/Qwen3-Coder-Next-NVFP4-GB10:ro
+    environment:
+      # NVFP4 kernel selection for GB10 — all four are required by the model card.
+      VLLM_NVFP4_GEMM_BACKEND: marlin
+      VLLM_TEST_FORCE_FP8_MARLIN: "1"
+      VLLM_USE_FLASHINFER_MOE_FP4: "0"
+      VLLM_MARLIN_USE_ATOMIC_ADD: "1"
+      MODEL: /models/Qwen3-Coder-Next-NVFP4-GB10
+      SERVED_MODEL_NAME: qwen3-coder-next
+      PORT: "8000"
+      MAX_MODEL_LEN: "262144"
+      # 0.90 is safe because ollama is stopped and disabled on this host.
+      GPU_MEMORY_UTIL: "0.90"
+      VLLM_EXTRA_ARGS: >-
+        --kv-cache-dtype fp8
+        --attention-backend flashinfer
+        --enable-prefix-caching
+        --enable-chunked-prefill
+        --max-num-batched-tokens 8192
+        --max-num-seqs 64
+        --enable-auto-tool-choice
+        --tool-call-parser qwen3_coder
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

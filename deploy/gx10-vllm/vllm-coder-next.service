@@ -1,0 +1,21 @@
+# Install on gx10:
+#   sudo cp vllm-coder-next.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now vllm-coder-next
+[Unit]
+Description=vLLM Qwen3-Coder-Next NVFP4 on DGX Spark
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=mwiget
+WorkingDirectory=/home/mwiget/dgx-spark-obs/vllm
+ExecStart=/usr/bin/docker compose up -d --wait
+ExecStop=/usr/bin/docker compose down
+# Model load from a 46 GB NVFP4 checkpoint takes a few minutes on first start.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

@@ -92,3 +92,58 @@ because every vLLM expression ends in `or vector(0)`.
   (CDI spec at `/var/run/cdi/nvidia.yaml`)
 - ollama also runs on `127.0.0.1:11434` and holds GPU memory when a model is
   loaded — account for it when setting vLLM's `--gpu-memory-utilization`
+
+## 3. vLLM on gx10
+
+Model: [`saricles/Qwen3-Coder-Next-NVFP4-GB10`](https://huggingface.co/saricles/Qwen3-Coder-Next-NVFP4-GB10)
+— 79.7B MoE coding model (512 experts, 10 active), NVFP4-quantised to 45.9 GB,
+~62 tok/s decode, 262k context.
+
+The repo is **gated**: accept the terms once on huggingface.co, then put a token
+on gx10:
+
+```bash
+ssh gx10 '~/hf-venv/bin/hf auth login'
+```
+
+Then fetch the weights and start the service:
+
+```bash
+ssh gx10 '~/dgx-spark-obs/vllm/download-model.sh'          # ~46 GB, resumable
+ssh gx10 'sudo cp ~/dgx-spark-obs/vllm/vllm-coder-next.service /etc/systemd/system/ \
+          && sudo systemctl daemon-reload \
+          && sudo systemctl enable --now vllm-coder-next'
+```
+
+### Deviations from the model card
+
+| | Model card | Here | Why |
+|---|---|---|---|
+| Port | 8000 | **8006** | matches the upstream README's scrape target |
+| `GPU_MEMORY_UTIL` | 0.90 | **0.90** | ollama is stopped + disabled, so the memory is free |
+
+ollama was disabled to free unified memory for vLLM:
+
+```bash
+sudo systemctl disable --now ollama    # re-enable if you want it back
+```
+
+### Speculative-decoding panels will read zero
+
+Qwen3-Coder-Next is a DeltaNet+attention hybrid with no MTP draft model, so
+`vllm:spec_decode_*` is never emitted. Those panels show `0` rather than
+"No data" because of the `or vector(0)` fallbacks — this is not a broken
+dashboard. To exercise them, run Qwen3.8-27B-NVFP4 with `--speculative-config`.
+
+## Local customisation
+
+`import-dashboard.sh` patches local values into the dashboard at import time
+instead of editing the file, keeping `Grafana_Dashboards/` merge-clean:
+
+```bash
+SPARK_POWER_W=240 ELECTRICITY_RATE_KWH=0.27 ./import-dashboard.sh
+```
+
+Those are the current defaults (upstream ships 240 W at $0.151/kWh). The script
+fails loudly if the upstream energy expression changes shape, rather than
+silently importing an unpatched dashboard.
