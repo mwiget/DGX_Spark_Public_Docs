@@ -1,11 +1,11 @@
 {
   "title": "gx10 \u2014 GB10 + vLLM",
   "uid": "gx10-vllm",
-  "description": "GB10, vLLM (Kolibri-1) and host telemetry for gx10. Replaces the upstream DGX Spark vLLM dashboard for day-to-day use.",
+  "description": "GB10, vLLM (Qwen3.6-35B-A3B) and host telemetry for gx10. Replaces the upstream DGX Spark vLLM dashboard for day-to-day use.",
   "tags": [
     "gx10",
     "vllm",
-    "kolibri",
+    "qwen",
     "nvidia",
     "gb10"
   ],
@@ -1005,7 +1005,7 @@
     {
       "id": 14,
       "type": "row",
-      "title": "vLLM \u2014 Kolibri-1 NVFP4 experts, 1M ctx (~/git/Kolibri-1-DGX-Spark)",
+      "title": "vLLM \u2014 Qwen3.6-35B-A3B NVFP4 + MTP, 262k ctx (qwen36.service)",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1019,7 +1019,7 @@
       "id": 15,
       "type": "stat",
       "title": "PREFILL TOK/S (10m)",
-      "description": "Newly computed (not prefix-cached) prompt tokens per second of prefill time, over requests that FINISHED in the last 10 min \u2014 vLLM records it at completion. Recipe measured ~5.3k tok/s at 21k context, ~580 averaged over a 978k fill.",
+      "description": "Newly computed (not prefix-cached) prompt tokens per second of prefill time, over requests that FINISHED in the last 10 min \u2014 vLLM records it at completion. Published for this checkpoint on GB10: ~6.3k tok/s at 8k input.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1076,7 +1076,7 @@
       "id": 16,
       "type": "stat",
       "title": "DECODE TOK/S PER STREAM",
-      "description": "1 / mean inter-token latency: live, updated every decode step. Kolibri-1 NVFP4 on GB10: ~50 tok/s at 1 stream, ~30 each at 4.",
+      "description": "Generated tokens per second of decode time, summed over streams: per-stream speed, live. Qwen3.6-35B-A3B NVFP4 + MTP on GB10: ~110-130 tok/s at 1 stream (Kolibri-1 was ~50).",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1093,7 +1093,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "1 / clamp_min(sum(rate(vllm:inter_token_latency_seconds_sum{host=\"gx10\"}[$__rate_interval])) / clamp_min(sum(rate(vllm:inter_token_latency_seconds_count{host=\"gx10\"}[$__rate_interval])), 1), 0.001)",
+          "expr": "sum(rate(vllm:generation_tokens_total{host=\"gx10\"}[$__rate_interval])) / clamp_min(sum(rate(vllm:inter_token_latency_seconds_sum{host=\"gx10\"}[$__rate_interval])), 0.001)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1133,7 +1133,7 @@
       "id": 17,
       "type": "stat",
       "title": "GENERATED TOK/S (ALL)",
-      "description": "Aggregate output tokens per second across all running requests (counter-based, live). ~128 tok/s with 4 concurrent reasoning streams.",
+      "description": "Aggregate output tokens per second across all running requests (counter-based, live). Kolibri-1 reached ~128 tok/s with 4 concurrent reasoning streams.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1255,7 +1255,7 @@
       "id": 19,
       "type": "stat",
       "title": "KV CACHE USAGE",
-      "description": "Share of the pinned KV pool (KV_CACHE_GIB=24, ~2.36M tokens) in use.",
+      "description": "Share of the pinned KV pool in use (KV_CACHE_GIB=16, ~1.35M tokens = 5x 262k).",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1983,7 +1983,7 @@
       "id": 27,
       "type": "timeseries",
       "title": "REQUEST PHASES (p50)",
-      "description": "Long decode with reasoning on: Kolibri thinks before tool calls (server default reasoning_effort=medium).",
+      "description": "Decode dominates with thinking on: the model reasons before most tool calls.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -2194,7 +2194,7 @@
       "id": 29,
       "type": "timeseries",
       "title": "TOOL-CALL PARSER",
-      "description": "Tool-call parser invocations per minute (kolibri1 Hermes-style parser).",
+      "description": "Tool-call parser invocations per minute (qwen3_xml parser).",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -2247,6 +2247,102 @@
     },
     {
       "id": 30,
+      "type": "timeseries",
+      "title": "MTP SPECULATIVE DECODING",
+      "description": "Qwen3.6 ships an MTP head; vLLM drafts 3 tokens per step. ~72 % acceptance measured on code (2026-10-06). Reads 0 for models without speculative decoding (Kolibri-1).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfr1d9ottv8xsc"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 66
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "100 * (sum(rate(vllm:spec_decode_num_accepted_tokens_total{host=\"gx10\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(vllm:spec_decode_num_draft_tokens_total{host=\"gx10\"}[$__rate_interval])) or vector(0), 1)",
+          "legendFormat": "acceptance %",
+          "refId": "A",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "(sum(rate(vllm:spec_decode_num_accepted_tokens_total{host=\"gx10\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(vllm:spec_decode_num_drafts_total{host=\"gx10\"}[$__rate_interval])) or vector(0), 1)",
+          "legendFormat": "accepted tokens per step",
+          "refId": "B",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "acceptance %"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#76B900"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "accepted tokens per step"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 31,
       "type": "row",
       "title": "Host \u2014 gx10",
       "collapsed": false,
@@ -2254,12 +2350,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 66
+        "y": 74
       },
       "panels": []
     },
     {
-      "id": 31,
+      "id": 32,
       "type": "timeseries",
       "title": "CPU UTILIZATION",
       "description": "",
@@ -2271,7 +2367,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 67
+        "y": 75
       },
       "targets": [
         {
@@ -2332,7 +2428,7 @@
       }
     },
     {
-      "id": 32,
+      "id": 33,
       "type": "timeseries",
       "title": "MEMORY UTILIZATION",
       "description": "",
@@ -2344,7 +2440,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 67
+        "y": 75
       },
       "targets": [
         {
@@ -2405,7 +2501,7 @@
       }
     },
     {
-      "id": 33,
+      "id": 34,
       "type": "timeseries",
       "title": "NETWORK RX / TX",
       "description": "",
@@ -2417,7 +2513,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 75
+        "y": 83
       },
       "targets": [
         {
@@ -2470,7 +2566,7 @@
       }
     },
     {
-      "id": 34,
+      "id": 35,
       "type": "timeseries",
       "title": "DISK IOPS",
       "description": "",
@@ -2482,7 +2578,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 75
+        "y": 83
       },
       "targets": [
         {

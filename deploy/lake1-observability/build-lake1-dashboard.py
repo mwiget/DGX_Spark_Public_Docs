@@ -31,12 +31,13 @@ HOSTS = {
              "description": "GB10, llama-server and host telemetry for gx10 when it runs "
                             "llama.cpp instead of vLLM. Companion to the DGX Spark vLLM dashboard.",
              "tags": ["gx10", "llama.cpp", "nvidia", "gb10"],
-             # --engine vllm: Kolibri-1 via ~/git/Kolibri-1-DGX-Spark on gx10 (2026-10-06)
-             "vllm": {"model": "Kolibri-1 NVFP4 experts, 1M ctx (~/git/Kolibri-1-DGX-Spark)",
+             # --engine vllm: Qwen3.6-35B-A3B via ~/git/qwen36-spark on gx10 (since 2026-10-06;
+             # Kolibri-1 before that, same job and port label)
+             "vllm": {"model": "Qwen3.6-35B-A3B NVFP4 + MTP, 262k ctx (qwen36.service)",
                       "title": "gx10 — GB10 + vLLM", "uid": "gx10-vllm",
-                      "description": "GB10, vLLM (Kolibri-1) and host telemetry for gx10. "
+                      "description": "GB10, vLLM (Qwen3.6-35B-A3B) and host telemetry for gx10. "
                                      "Replaces the upstream DGX Spark vLLM dashboard for day-to-day use.",
-                      "tags": ["gx10", "vllm", "kolibri", "nvidia", "gb10"]}},
+                      "tags": ["gx10", "vllm", "qwen", "nvidia", "gb10"]}},
 }
 ap = argparse.ArgumentParser()
 ap.add_argument("--host", choices=sorted(HOSTS), default="lake1")
@@ -138,17 +139,21 @@ def vllm_row():
          f"clamp_min(sum(rate({V}request_prefill_time_seconds_sum[10m])), 0.001)", "short", w=3,
          desc="Newly computed (not prefix-cached) prompt tokens per second of prefill time, "
               "over requests that FINISHED in the last 10 min — vLLM records it at completion. "
-              "Recipe measured ~5.3k tok/s at 21k context, ~580 averaged over a 978k fill.")
+              "Published for this checkpoint on GB10: ~6.3k tok/s at 8k input.")
+    # Not 1 / mean inter-token latency: with speculative decoding vLLM observes one
+    # "inter-token" interval per decode STEP, which emits several tokens (count 1070
+    # vs 3370 tokens with MTP-3), so that reads ~3x low. Tokens over decode time is
+    # right either way, and both counters update live.
     stat("DECODE TOK/S PER STREAM",
-         f"1 / clamp_min(sum(rate({V}inter_token_latency_seconds_sum[$__rate_interval])) / "
-         f"clamp_min(sum(rate({V}inter_token_latency_seconds_count[$__rate_interval])), 1), 0.001)",
+         f"sum(rate({V}generation_tokens_total[$__rate_interval])) / "
+         f"clamp_min(sum(rate({V}inter_token_latency_seconds_sum[$__rate_interval])), 0.001)",
          "short", w=3,
-         desc="1 / mean inter-token latency: live, updated every decode step. Kolibri-1 NVFP4 "
-              "on GB10: ~50 tok/s at 1 stream, ~30 each at 4.")
+         desc="Generated tokens per second of decode time, summed over streams: per-stream speed, "
+              "live. Qwen3.6-35B-A3B NVFP4 + MTP on GB10: ~110-130 tok/s at 1 stream (Kolibri-1 was ~50).")
     stat("GENERATED TOK/S (ALL)", f"sum(rate({V}generation_tokens_total[$__rate_interval])) or vector(0)",
          "short", w=3,
          desc="Aggregate output tokens per second across all running requests (counter-based, live). "
-              "~128 tok/s with 4 concurrent reasoning streams.")
+              "Kolibri-1 reached ~128 tok/s with 4 concurrent reasoning streams.")
     stat("PREFIX CACHE HIT RATE",
          f"100 * ((sum({V}prefix_cache_hits_total) or vector(0)) / "
          f"clamp_min(sum({V}prefix_cache_queries_total) or vector(0), 1))", "percent",
@@ -157,7 +162,7 @@ def vllm_row():
          thresholds=[{"color": RED, "value": None}, {"color": AMBER, "value": 40},
                      {"color": GREEN, "value": 70}])
     stat("KV CACHE USAGE", f"100 * (max({V}kv_cache_usage_perc) or vector(0))", "percent",
-         desc="Share of the pinned KV pool (KV_CACHE_GIB=24, ~2.36M tokens) in use.",
+         desc="Share of the pinned KV pool in use (KV_CACHE_GIB=16, ~1.35M tokens = 5x 262k).",
          thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 80},
                      {"color": RED, "value": 95}])
     stat("REQUESTS RUNNING", f"sum({V}num_requests_running) or vector(0)", "short", w=3,
@@ -210,8 +215,7 @@ def vllm_row():
         (q(0.5, f"{V}request_decode_time_seconds"), "decode"),
         (q(0.5, f"{V}e2e_request_latency_seconds"), "end-to-end")],
        "s", colors={"queue": RED, "prefill": AMBER, "decode": GREEN, "end-to-end": BLUE},
-       desc="Long decode with reasoning on: Kolibri thinks before tool calls "
-            "(server default reasoning_effort=medium).")
+       desc="Decode dominates with thinking on: the model reasons before most tool calls.")
     y[0] += 8
 
     ts("GENERATED TOKENS PER REQUEST",
@@ -221,7 +225,19 @@ def vllm_row():
     ts("TOOL-CALL PARSER",
        [(f"sum by (outcome) (rate({V}tool_call_parser_invocations_total[$__rate_interval])) * 60",
          "{{outcome}}")],
-       "short", desc="Tool-call parser invocations per minute (kolibri1 Hermes-style parser).")
+       "short", desc="Tool-call parser invocations per minute (qwen3_xml parser).")
+    y[0] += 8
+
+    ts("MTP SPECULATIVE DECODING",
+       [(f"100 * (sum(rate({V}spec_decode_num_accepted_tokens_total[$__rate_interval])) or vector(0)) / "
+         f"clamp_min(sum(rate({V}spec_decode_num_draft_tokens_total[$__rate_interval])) or vector(0), 1)",
+         "acceptance %"),
+        (f"(sum(rate({V}spec_decode_num_accepted_tokens_total[$__rate_interval])) or vector(0)) / "
+         f"clamp_min(sum(rate({V}spec_decode_num_drafts_total[$__rate_interval])) or vector(0), 1)",
+         "accepted tokens per step")],
+       "short", colors={"acceptance %": GREEN, "accepted tokens per step": BLUE},
+       desc="Qwen3.6 ships an MTP head; vLLM drafts 3 tokens per step. ~72 % acceptance measured on "
+            "code (2026-10-06). Reads 0 for models without speculative decoding (Kolibri-1).")
     y[0] += 8
 
 

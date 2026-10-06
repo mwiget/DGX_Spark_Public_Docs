@@ -1,0 +1,27 @@
+# /etc/systemd/system/qwen36.service — Qwen3.6-35B-A3B NVFP4 (vLLM, :8896) on gx10 at boot.
+# Install:
+#   sudo cp qwen36.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now qwen36
+# start.sh launches the container detached and returns once /health answers (~4.5 min).
+[Unit]
+Description=Qwen3.6-35B-A3B NVFP4 on vLLM 0.30 (gx10, :8896)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+Conflicts=kolibri.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=mwiget
+WorkingDirectory=/home/mwiget/git/qwen36-spark
+ExecStart=/home/mwiget/git/qwen36-spark/start.sh
+ExecStop=/usr/bin/docker stop -t 30 vllm-qwen36
+ExecStopPost=-/usr/bin/docker rm -f vllm-qwen36
+TimeoutStartSec=1300
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=120
+
+[Install]
+WantedBy=multi-user.target

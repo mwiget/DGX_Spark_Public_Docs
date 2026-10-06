@@ -5,6 +5,13 @@ vLLM on the DGX Spark, with the full **1,048,576-token** context, for agentic
 coding through pi, opencode and Claude Code. Replaced Qwen3-Coder-Next
 (section 3 of [../README.md](../README.md)) on 2026-10-06.
 
+> **Not the default any more (same day).** gx10 now serves Qwen3.6-35B-A3B —
+> [gx10-qwen36](../gx10-qwen36/README.md). Everything below is still installed;
+> `kolibri.service` is disabled. Switch back with
+> `sudo systemctl stop qwen36 && sudo systemctl start kolibri`; the units conflict,
+> so only one runs. In the meantime DG1001's GX10 benchmark scored Kolibri-1 FP8
+> 85/86 and 84/86 with 0 malformed tool calls in 257 — close to the leaders.
+
 | | |
 |---|---|
 | Model | Kolibri-1: 78.1B MoE, 3.46B active (384 experts, 6 + 1 shared), 50 layers, Apache-2.0 |
@@ -12,7 +19,7 @@ coding through pi, opencode and Claude Code. Replaced Qwen3-Coder-Next
 | Serving | stock `vllm/vllm-openai:v0.30.0` + Aleph Alpha's `aleph-alpha-inference` plugin |
 | Recipe | [15ky3/Kolibri-1-DGX-Spark](https://github.com/15ky3/Kolibri-1-DGX-Spark) @ `4f76c24`, in `~/git/Kolibri-1-DGX-Spark` |
 | Endpoint | `http://gx10:8895/v1` (OpenAI + Anthropic `/v1/messages`), model `kolibri-1` |
-| Unit | `kolibri.service`, enabled at boot |
+| Unit | `kolibri.service` (disabled since 2026-10-06) |
 | Dashboard | <http://lake1:3001/d/gx10-vllm> |
 
 ## Quantisation

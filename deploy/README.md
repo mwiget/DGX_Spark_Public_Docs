@@ -5,7 +5,7 @@ Concrete deployment of the upstream dashboard across two machines:
 | Host | Role | What runs there |
 |---|---|---|
 | **lake1** (`192.168.68.113`) | observability | Prometheus `:9494`, Grafana `:3001` |
-| **gx10** (`100.67.215.111`, Tailscale) | DGX Spark GB10 | vLLM `:8895` (Kolibri-1, since 2026-10-06; was `:8006`), node_exporter `:9100` |
+| **gx10** (`100.67.215.111`, Tailscale) | DGX Spark GB10 | vLLM `:8896` (Qwen3.6-35B-A3B, since 2026-10-06; Kolibri-1 `:8895` before, Qwen3-Coder-Next `:8006` before that), node_exporter `:9100` |
 
 lake1 reaches gx10 over Tailscale. Prometheus scrapes both exporters on gx10;
 nothing needs to be installed on lake1 beyond Docker.
@@ -95,8 +95,9 @@ because every vLLM expression ends in `or vector(0)`.
 
 ## 3. vLLM on gx10
 
-> **Superseded 2026-10-06** by Kolibri-1 on `:8895` — see
-> [gx10-kolibri/README.md](gx10-kolibri/README.md). `vllm-coder-next.service` is
+> **Superseded 2026-10-06** — gx10 now serves Qwen3.6-35B-A3B on `:8896`, see
+> [gx10-qwen36/README.md](gx10-qwen36/README.md) (Kolibri-1, briefly in between:
+> [gx10-kolibri/README.md](gx10-kolibri/README.md)). `vllm-coder-next.service` is
 > disabled and the weights moved to `tnas:/zfs/archive/models`; this section is
 > kept as the record of how Qwen3-Coder-Next was run.
 
@@ -293,11 +294,12 @@ link rather than next to itself.
 
 ## Disk
 
-As of 2026-10-06 on gx10 (916 GB root, **470 GB free**):
+As of 2026-10-06 on gx10 (916 GB root, 448 GB free):
 
 | Path | Size | |
 |---|---:|---|
-| `~/models/hf` (`iSkye/Kolibri-1-NVFP4-Experts`) | 43 GB | in use, see [gx10-kolibri](gx10-kolibri/README.md) |
+| `~/models/hf` (`nvidia/Qwen3.6-35B-A3B-NVFP4`) | 23.5 GB | in use, see [gx10-qwen36](gx10-qwen36/README.md) |
+| `~/models/hf` (`iSkye/Kolibri-1-NVFP4-Experts`) | 43 GB | kept, service disabled, see [gx10-kolibri](gx10-kolibri/README.md) |
 | image `vllm/vllm-openai:v0.30.0` | 22 GB | in use |
 | `~/models/qwen3.8-cc.jinja` | 12 KB | patched Claude Code template, from ../claude-local |
 
