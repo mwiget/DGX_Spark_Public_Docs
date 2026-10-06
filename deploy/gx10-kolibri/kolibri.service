@@ -1,0 +1,30 @@
+# /etc/systemd/system/kolibri.service — Kolibri-1 (vLLM, :8895) on gx10 at boot.
+# Install:
+#   sudo cp kolibri.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now kolibri
+# start.sh launches the container detached and returns once /health answers;
+# the memwatch watchdog it spawns stays in this unit's cgroup.
+[Unit]
+Description=Kolibri-1 NVFP4 on vLLM 0.30 (gx10, :8895)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=mwiget
+WorkingDirectory=/home/mwiget/git/Kolibri-1-DGX-Spark
+# clear a container left over from a failed or interrupted start
+ExecStartPre=-/home/mwiget/git/Kolibri-1-DGX-Spark/stop.sh --force
+ExecStart=/home/mwiget/git/Kolibri-1-DGX-Spark/start.sh
+ExecStop=/home/mwiget/git/Kolibri-1-DGX-Spark/stop.sh
+# eager load ~136 s; start.sh itself gives up after WAIT_TIMEOUT=1800 s
+TimeoutStartSec=1900
+TimeoutStopSec=90
+# e.g. the MemAvailable pre-flight failing while the k3s stacks start up at boot
+Restart=on-failure
+RestartSec=120
+
+[Install]
+WantedBy=multi-user.target

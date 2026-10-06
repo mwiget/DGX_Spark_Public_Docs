@@ -5,7 +5,7 @@ Concrete deployment of the upstream dashboard across two machines:
 | Host | Role | What runs there |
 |---|---|---|
 | **lake1** (`192.168.68.113`) | observability | Prometheus `:9494`, Grafana `:3001` |
-| **gx10** (`100.67.215.111`, Tailscale) | DGX Spark GB10 | vLLM `:8006`, node_exporter `:9100` |
+| **gx10** (`100.67.215.111`, Tailscale) | DGX Spark GB10 | vLLM `:8895` (Kolibri-1, since 2026-10-06; was `:8006`), node_exporter `:9100` |
 
 lake1 reaches gx10 over Tailscale. Prometheus scrapes both exporters on gx10;
 nothing needs to be installed on lake1 beyond Docker.
@@ -94,6 +94,11 @@ because every vLLM expression ends in `or vector(0)`.
   loaded — account for it when setting vLLM's `--gpu-memory-utilization`
 
 ## 3. vLLM on gx10
+
+> **Superseded 2026-10-06** by Kolibri-1 on `:8895` — see
+> [gx10-kolibri/README.md](gx10-kolibri/README.md). `vllm-coder-next.service` is
+> disabled and the weights moved to `tnas:/zfs/archive/models`; this section is
+> kept as the record of how Qwen3-Coder-Next was run.
 
 Model: [`saricles/Qwen3-Coder-Next-NVFP4-GB10`](https://huggingface.co/saricles/Qwen3-Coder-Next-NVFP4-GB10)
 — 79.7B MoE coding model (512 experts, 10 active), NVFP4-quantised to 45.9 GB,
@@ -219,7 +224,12 @@ Limit of concurrent requests reached (40), try again later.
 ```
 
 That kills *all* host metrics, not just filesystem ones, and it does not recover
-on its own — the stuck requests are never released. Both exporters now set
+on its own — the stuck requests are never released.
+
+**It happened again on 2026-10-03 (01:41) with the exclusion already in place**, and
+went unnoticed until 2026-10-06; `docker restart dgxspark-node-exporter` fixed it.
+The cause that time is not known — if the gx10 memory panels go blank, check
+`curl -s gx10:9100/metrics | head -1` for the same message. Both exporters now set
 `--collector.filesystem.fs-types-exclude=...|nfs|nfs4|cifs|smb3|fuse\..*` and the
 node/GPU jobs scrape at 15s with a 10s timeout instead of the global 5s.
 
@@ -283,16 +293,22 @@ link rather than next to itself.
 
 ## Disk
 
-The NVFP4 checkpoints are large. Currently on gx10:
+As of 2026-10-06 on gx10 (916 GB root, **470 GB free**):
 
 | Path | Size | |
 |---|---:|---|
-| `~/models/Qwen3-Coder-Next-NVFP4-GB10` | 43 GB | in use |
+| `~/models/hf` (`iSkye/Kolibri-1-NVFP4-Experts`) | 43 GB | in use, see [gx10-kolibri](gx10-kolibri/README.md) |
+| image `vllm/vllm-openai:v0.30.0` | 22 GB | in use |
 | `~/models/qwen3.8-cc.jinja` | 12 KB | patched Claude Code template, from ../claude-local |
 
-229 GB free. The two Qwen3.8-27B NVFP4 checkpoints were deleted after
-benchmarking, along with the gx10 copy of `mtp-Qwen3.8-27B-Q4_0.gguf` — 42 GB
-reclaimed. The lake1 copy of that GGUF is untouched and still backs
-`serve-lake1.sh` in ../claude-local. To redo the 27B comparison, re-download
-`sakamakismile/Qwen3.8-27B-MTP-NVFP4` — the only one of three that loads, and
-only with `VLLM_NVFP4_GEMM_BACKEND=cutlass`. See COMPARISON.md.
+Moved to `tnas:/zfs/archive/models` (NFS, `/mnt/tnas` on gx10):
+`Qwen3-Coder-Next-NVFP4-GB10` (43 GB) and `Qwen3.8-Flash-Next-IQ3_S` (78 GB).
+Reclaimed in the same cleanup: orphaned anonymous Docker volumes from deleted
+k3d clusters (119 GB), Docker build cache (76 GB), the
+`avarok/dgx-vllm-nvfp4-kernel:v23` image (23 GB), and image-generation caches.
+
+Earlier: the two Qwen3.8-27B NVFP4 checkpoints were deleted after benchmarking,
+along with the gx10 copy of `mtp-Qwen3.8-27B-Q4_0.gguf`. To redo the 27B
+comparison, re-download `sakamakismile/Qwen3.8-27B-MTP-NVFP4` — the only one of
+three that loads, and only with `VLLM_NVFP4_GEMM_BACKEND=cutlass`. See
+COMPARISON.md.
