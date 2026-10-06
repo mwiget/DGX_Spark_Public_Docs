@@ -129,17 +129,26 @@ def q(p, metric):
 def vllm_row():
     V = "vllm:"
     row(f"vLLM — {HC['model']}")
-    # Per-request rates from the per-phase histograms: tokens per second of the time
-    # actually spent in that phase, the same meaning as the llama.cpp row above.
-    stat("PREFILL TOK/S",
-         f"sum(rate({V}request_prefill_kv_computed_tokens_sum[$__rate_interval])) / "
-         f"clamp_min(sum(rate({V}request_prefill_time_seconds_sum[$__rate_interval])), 0.001)", "short",
-         desc="Newly computed (not prefix-cached) prompt tokens per second of prefill time. "
+    # vLLM records the per-request histograms (request_*) only when a request
+    # FINISHES. A long reasoning request runs for minutes, so a stat built on them
+    # over $__rate_interval reads ~0 while the GPU is flat out. Live speed comes from
+    # inter_token_latency (observed every step) and the token counters instead.
+    stat("PREFILL TOK/S (10m)",
+         f"sum(rate({V}request_prefill_kv_computed_tokens_sum[10m])) / "
+         f"clamp_min(sum(rate({V}request_prefill_time_seconds_sum[10m])), 0.001)", "short", w=3,
+         desc="Newly computed (not prefix-cached) prompt tokens per second of prefill time, "
+              "over requests that FINISHED in the last 10 min — vLLM records it at completion. "
               "Recipe measured ~5.3k tok/s at 21k context, ~580 averaged over a 978k fill.")
-    stat("DECODE TOK/S",
-         f"sum(rate({V}request_generation_tokens_sum[$__rate_interval])) / "
-         f"clamp_min(sum(rate({V}request_decode_time_seconds_sum[$__rate_interval])), 0.001)", "short",
-         desc="Per-stream decode speed. Kolibri-1 NVFP4 on GB10: ~50 tok/s at 1 stream.")
+    stat("DECODE TOK/S PER STREAM",
+         f"1 / clamp_min(sum(rate({V}inter_token_latency_seconds_sum[$__rate_interval])) / "
+         f"clamp_min(sum(rate({V}inter_token_latency_seconds_count[$__rate_interval])), 1), 0.001)",
+         "short", w=3,
+         desc="1 / mean inter-token latency: live, updated every decode step. Kolibri-1 NVFP4 "
+              "on GB10: ~50 tok/s at 1 stream, ~30 each at 4.")
+    stat("GENERATED TOK/S (ALL)", f"sum(rate({V}generation_tokens_total[$__rate_interval])) or vector(0)",
+         "short", w=3,
+         desc="Aggregate output tokens per second across all running requests (counter-based, live). "
+              "~128 tok/s with 4 concurrent reasoning streams.")
     stat("PREFIX CACHE HIT RATE",
          f"100 * ((sum({V}prefix_cache_hits_total) or vector(0)) / "
          f"clamp_min(sum({V}prefix_cache_queries_total) or vector(0), 1))", "percent",
@@ -151,7 +160,7 @@ def vllm_row():
          desc="Share of the pinned KV pool (KV_CACHE_GIB=24, ~2.36M tokens) in use.",
          thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 80},
                      {"color": RED, "value": 95}])
-    stat("REQUESTS RUNNING", f"sum({V}num_requests_running) or vector(0)", "short",
+    stat("REQUESTS RUNNING", f"sum({V}num_requests_running) or vector(0)", "short", w=3,
          desc="MAX_NUM_SEQS=4.")
     stat("REQUESTS WAITING", f"sum({V}num_requests_waiting) or vector(0)", "short",
          desc="Non-zero means all sequence slots or the KV pool are full.",

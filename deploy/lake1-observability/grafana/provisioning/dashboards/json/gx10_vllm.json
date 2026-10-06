@@ -1018,15 +1018,15 @@
     {
       "id": 15,
       "type": "stat",
-      "title": "PREFILL TOK/S",
-      "description": "Newly computed (not prefix-cached) prompt tokens per second of prefill time. Recipe measured ~5.3k tok/s at 21k context, ~580 averaged over a 978k fill.",
+      "title": "PREFILL TOK/S (10m)",
+      "description": "Newly computed (not prefix-cached) prompt tokens per second of prefill time, over requests that FINISHED in the last 10 min \u2014 vLLM records it at completion. Recipe measured ~5.3k tok/s at 21k context, ~580 averaged over a 978k fill.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 3,
         "x": 0,
         "y": 30
       },
@@ -1036,7 +1036,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(vllm:request_prefill_kv_computed_tokens_sum{host=\"gx10\"}[$__rate_interval])) / clamp_min(sum(rate(vllm:request_prefill_time_seconds_sum{host=\"gx10\"}[$__rate_interval])), 0.001)",
+          "expr": "sum(rate(vllm:request_prefill_kv_computed_tokens_sum{host=\"gx10\"}[10m])) / clamp_min(sum(rate(vllm:request_prefill_time_seconds_sum{host=\"gx10\"}[10m])), 0.001)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1075,16 +1075,16 @@
     {
       "id": 16,
       "type": "stat",
-      "title": "DECODE TOK/S",
-      "description": "Per-stream decode speed. Kolibri-1 NVFP4 on GB10: ~50 tok/s at 1 stream.",
+      "title": "DECODE TOK/S PER STREAM",
+      "description": "1 / mean inter-token latency: live, updated every decode step. Kolibri-1 NVFP4 on GB10: ~50 tok/s at 1 stream, ~30 each at 4.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 4,
+        "w": 3,
+        "x": 3,
         "y": 30
       },
       "targets": [
@@ -1093,7 +1093,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(vllm:request_generation_tokens_sum{host=\"gx10\"}[$__rate_interval])) / clamp_min(sum(rate(vllm:request_decode_time_seconds_sum{host=\"gx10\"}[$__rate_interval])), 0.001)",
+          "expr": "1 / clamp_min(sum(rate(vllm:inter_token_latency_seconds_sum{host=\"gx10\"}[$__rate_interval])) / clamp_min(sum(rate(vllm:inter_token_latency_seconds_count{host=\"gx10\"}[$__rate_interval])), 1), 0.001)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1132,6 +1132,63 @@
     {
       "id": 17,
       "type": "stat",
+      "title": "GENERATED TOK/S (ALL)",
+      "description": "Aggregate output tokens per second across all running requests (counter-based, live). ~128 tok/s with 4 concurrent reasoning streams.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfr1d9ottv8xsc"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "sum(rate(vllm:generation_tokens_total{host=\"gx10\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#76B900",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 18,
+      "type": "stat",
       "title": "PREFIX CACHE HIT RATE",
       "description": "Since server start. Agent loops resend the whole conversation each turn, so this should sit high; low means every turn pays a cold prefill.",
       "datasource": {
@@ -1141,7 +1198,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 8,
+        "x": 9,
         "y": 30
       },
       "targets": [
@@ -1195,7 +1252,7 @@
       }
     },
     {
-      "id": 18,
+      "id": 19,
       "type": "stat",
       "title": "KV CACHE USAGE",
       "description": "Share of the pinned KV pool (KV_CACHE_GIB=24, ~2.36M tokens) in use.",
@@ -1206,7 +1263,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 12,
+        "x": 13,
         "y": 30
       },
       "targets": [
@@ -1260,7 +1317,7 @@
       }
     },
     {
-      "id": 19,
+      "id": 20,
       "type": "stat",
       "title": "REQUESTS RUNNING",
       "description": "MAX_NUM_SEQS=4.",
@@ -1270,8 +1327,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 16,
+        "w": 3,
+        "x": 17,
         "y": 30
       },
       "targets": [
@@ -1317,7 +1374,7 @@
       }
     },
     {
-      "id": 20,
+      "id": 21,
       "type": "stat",
       "title": "REQUESTS WAITING",
       "description": "Non-zero means all sequence slots or the KV pool are full.",
@@ -1378,7 +1435,7 @@
       }
     },
     {
-      "id": 21,
+      "id": 22,
       "type": "timeseries",
       "title": "THROUGHPUT (AGGREGATE)",
       "description": "Wall-clock token rates across all streams. Cached prompt tokens are served from the prefix cache without recompute.",
@@ -1499,7 +1556,7 @@
       }
     },
     {
-      "id": 22,
+      "id": 23,
       "type": "timeseries",
       "title": "LATENCY",
       "description": "TTFT is dominated by prefill: long cold prompts take minutes at 1M.",
@@ -1615,7 +1672,7 @@
       }
     },
     {
-      "id": 23,
+      "id": 24,
       "type": "timeseries",
       "title": "KV CACHE / PREEMPTIONS",
       "description": "Preemptions mean the KV pool ran out and a request was evicted and recomputed.",
@@ -1711,7 +1768,7 @@
       }
     },
     {
-      "id": 24,
+      "id": 25,
       "type": "timeseries",
       "title": "REQUESTS",
       "description": "",
@@ -1832,7 +1889,7 @@
       }
     },
     {
-      "id": 25,
+      "id": 26,
       "type": "timeseries",
       "title": "PROMPT LENGTH (CONTEXT PER REQUEST)",
       "description": "How much context the agents actually send. Histogram buckets, so values are bucket-bounded; max_model_len is 1,048,576.",
@@ -1923,7 +1980,7 @@
       }
     },
     {
-      "id": 26,
+      "id": 27,
       "type": "timeseries",
       "title": "REQUEST PHASES (p50)",
       "description": "Long decode with reasoning on: Kolibri thinks before tool calls (server default reasoning_effort=medium).",
@@ -2069,7 +2126,7 @@
       }
     },
     {
-      "id": 27,
+      "id": 28,
       "type": "timeseries",
       "title": "GENERATED TOKENS PER REQUEST",
       "description": "Includes reasoning tokens.",
@@ -2134,7 +2191,7 @@
       }
     },
     {
-      "id": 28,
+      "id": 29,
       "type": "timeseries",
       "title": "TOOL-CALL PARSER",
       "description": "Tool-call parser invocations per minute (kolibri1 Hermes-style parser).",
@@ -2189,7 +2246,7 @@
       }
     },
     {
-      "id": 29,
+      "id": 30,
       "type": "row",
       "title": "Host \u2014 gx10",
       "collapsed": false,
@@ -2202,7 +2259,7 @@
       "panels": []
     },
     {
-      "id": 30,
+      "id": 31,
       "type": "timeseries",
       "title": "CPU UTILIZATION",
       "description": "",
@@ -2275,7 +2332,7 @@
       }
     },
     {
-      "id": 31,
+      "id": 32,
       "type": "timeseries",
       "title": "MEMORY UTILIZATION",
       "description": "",
@@ -2348,7 +2405,7 @@
       }
     },
     {
-      "id": 32,
+      "id": 33,
       "type": "timeseries",
       "title": "NETWORK RX / TX",
       "description": "",
@@ -2413,7 +2470,7 @@
       }
     },
     {
-      "id": 33,
+      "id": 34,
       "type": "timeseries",
       "title": "DISK IOPS",
       "description": "",
