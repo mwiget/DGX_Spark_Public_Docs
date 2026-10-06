@@ -7,10 +7,12 @@ global:
 
 scrape_configs:
   # vLLM OpenAI server on the DGX Spark. Serves vllm:* metrics.
+  # Since 2026-10-06: Kolibri-1 (~/git/Kolibri-1-DGX-Spark, port 8895); was gx10:8006.
   - job_name: vllm
     metrics_path: /metrics
     static_configs:
-      - targets: ["gx10:8006"]
+      - targets: ["gx10:8895"]
+        labels: {host: gx10}
 
   # Host telemetry for the DGX Spark system-utilization panels.
   - job_name: node
