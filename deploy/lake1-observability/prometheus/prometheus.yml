@@ -18,6 +18,25 @@ scrape_configs:
     scrape_timeout: 10s
     static_configs:
       - targets: ["gx10:9100"]
+        labels: {host: gx10}
+
+  # gx10 GPU: GB10, via nvidia_gpu_exporter (nvidia-smi). Container gx10-gpu-exporter,
+  # --gpus all; the Spark dashboard's own GPU panel only reads vLLM's KV-cache usage.
+  - job_name: gx10-gpu
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ["gx10:9835"]
+        labels: {host: gx10}
+
+  # llama-server on gx10 when it runs instead of vLLM (Qwen3.8-Flash-Next IQ3_S, 2026-10-02).
+  # Started with --metrics --host 100.67.215.111 (Tailscale only, no API key) --port 18091.
+  # DOWN whenever llama-server is not running - expected.
+  - job_name: gx10-llamacpp
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gx10:18091"]
+        labels: {host: gx10}
 
   # lake1 host telemetry (deploy/lake1-exporters).
   - job_name: lake1-node

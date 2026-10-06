@@ -1,13 +1,12 @@
 {
-  "title": "lake1 \u2014 RTX PRO 5000 + llama.cpp",
-  "uid": "lake1-llamacpp",
-  "description": "RTX PRO 5000 Blackwell, llama-server (../claude-local) and host telemetry for lake1. Companion to the DGX Spark vLLM dashboard.",
+  "title": "gx10 \u2014 GB10 + llama.cpp",
+  "uid": "gx10-llamacpp",
+  "description": "GB10, llama-server and host telemetry for gx10 when it runs llama.cpp instead of vLLM. Companion to the DGX Spark vLLM dashboard.",
   "tags": [
-    "lake1",
+    "gx10",
     "llama.cpp",
     "nvidia",
-    "rtx-pro-5000",
-    "claude-local"
+    "gb10"
   ],
   "timezone": "browser",
   "editable": true,
@@ -21,7 +20,7 @@
     {
       "id": 1,
       "type": "row",
-      "title": "GPU \u2014 RTX PRO 5000 Blackwell (lake1)",
+      "title": "GPU \u2014 GB10 (gx10)",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -52,7 +51,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * (avg(nvidia_smi_utilization_gpu_ratio{host=\"lake1\"}) or vector(0))",
+          "expr": "100 * (avg(nvidia_smi_utilization_gpu_ratio{host=\"gx10\"}) or vector(0))",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -95,8 +94,8 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "VRAM USED",
-      "description": "RTX PRO 5000 has 48 GB. llama-server with 2x131k slots measures ~46.3 GB.",
+      "title": "UNIFIED MEMORY USED",
+      "description": "GB10 shares one memory pool between CPU and GPU; nvidia-smi reports no VRAM.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -113,7 +112,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_memory_used_bytes{host=\"lake1\"}) or vector(0)",
+          "expr": "node_memory_MemTotal_bytes{host=\"gx10\"} - node_memory_MemAvailable_bytes{host=\"gx10\"}",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -152,7 +151,7 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "VRAM UTILIZATION",
+      "title": "UNIFIED MEMORY UTILIZATION",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -170,7 +169,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * (avg(nvidia_smi_memory_used_bytes{host=\"lake1\"}) / clamp_min(avg(nvidia_smi_memory_total_bytes{host=\"lake1\"}), 1) or vector(0))",
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes{host=\"gx10\"} / clamp_min(node_memory_MemTotal_bytes{host=\"gx10\"}, 1))",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -235,7 +234,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_temperature_gpu{host=\"lake1\"}) or vector(0)",
+          "expr": "avg(nvidia_smi_temperature_gpu{host=\"gx10\"}) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -300,7 +299,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_power_draw_watts{host=\"lake1\"}) or vector(0)",
+          "expr": "avg(nvidia_smi_power_draw_watts{host=\"gx10\"}) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -357,7 +356,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_clocks_current_sm_clock_hz{host=\"lake1\"}) or vector(0)",
+          "expr": "avg(nvidia_smi_clocks_current_sm_clock_hz{host=\"gx10\"}) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -414,7 +413,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * avg(nvidia_smi_utilization_gpu_ratio{host=\"lake1\"})",
+          "expr": "100 * avg(nvidia_smi_utilization_gpu_ratio{host=\"gx10\"})",
           "legendFormat": "gpu",
           "refId": "A",
           "range": true
@@ -424,7 +423,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * avg(nvidia_smi_utilization_memory_ratio{host=\"lake1\"})",
+          "expr": "100 * avg(nvidia_smi_utilization_memory_ratio{host=\"gx10\"})",
           "legendFormat": "memory controller",
           "refId": "B",
           "range": true
@@ -494,7 +493,7 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "VRAM USED vs TOTAL",
+      "title": "UNIFIED MEMORY USED vs TOTAL",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -512,7 +511,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_memory_used_bytes{host=\"lake1\"})",
+          "expr": "node_memory_MemTotal_bytes{host=\"gx10\"} - node_memory_MemAvailable_bytes{host=\"gx10\"}",
           "legendFormat": "used",
           "refId": "A",
           "range": true
@@ -522,7 +521,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_memory_total_bytes{host=\"lake1\"})",
+          "expr": "node_memory_MemTotal_bytes{host=\"gx10\"}",
           "legendFormat": "total",
           "refId": "B",
           "range": true
@@ -608,7 +607,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_power_draw_watts{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_power_draw_watts{host=\"gx10\"})",
           "legendFormat": "draw",
           "refId": "A",
           "range": true
@@ -618,7 +617,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_power_limit_watts{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_power_limit_watts{host=\"gx10\"})",
           "legendFormat": "limit",
           "refId": "B",
           "range": true
@@ -704,7 +703,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_temperature_gpu{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_temperature_gpu{host=\"gx10\"})",
           "legendFormat": "gpu temp (C)",
           "refId": "A",
           "range": true
@@ -714,7 +713,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * avg(nvidia_smi_fan_speed_ratio{host=\"lake1\"})",
+          "expr": "100 * avg(nvidia_smi_fan_speed_ratio{host=\"gx10\"})",
           "legendFormat": "fan (%)",
           "refId": "B",
           "range": true
@@ -800,7 +799,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_clocks_current_sm_clock_hz{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_clocks_current_sm_clock_hz{host=\"gx10\"})",
           "legendFormat": "sm",
           "refId": "A",
           "range": true
@@ -810,7 +809,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_clocks_current_memory_clock_hz{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_clocks_current_memory_clock_hz{host=\"gx10\"})",
           "legendFormat": "memory",
           "refId": "B",
           "range": true
@@ -820,7 +819,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_clocks_max_sm_clock_hz{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_clocks_max_sm_clock_hz{host=\"gx10\"})",
           "legendFormat": "sm max",
           "refId": "C",
           "range": true
@@ -875,7 +874,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_clocks_event_reasons_sw_power_cap{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_clocks_event_reasons_sw_power_cap{host=\"gx10\"})",
           "legendFormat": "sw power cap",
           "refId": "A",
           "range": true
@@ -885,7 +884,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_clocks_event_reasons_sw_thermal_slowdown{host=\"gx10\"})",
           "legendFormat": "sw thermal",
           "refId": "B",
           "range": true
@@ -895,7 +894,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_clocks_event_reasons_hw_thermal_slowdown{host=\"gx10\"})",
           "legendFormat": "hw thermal",
           "refId": "C",
           "range": true
@@ -905,7 +904,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{host=\"lake1\"})",
+          "expr": "avg(nvidia_smi_clocks_event_reasons_hw_power_brake_slowdown{host=\"gx10\"})",
           "legendFormat": "hw power brake",
           "refId": "D",
           "range": true
@@ -1005,7 +1004,7 @@
     {
       "id": 14,
       "type": "row",
-      "title": "llama.cpp \u2014 Qwen3.8-27B Q8 + MTP (../claude-local)",
+      "title": "llama.cpp \u2014 Qwen3.8-Flash-Next IQ3_S, no MTP (~/llama-flashnext.log)",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1036,7 +1035,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:prompt_tokens_total{host=\"lake1\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:prompt_seconds_total{host=\"lake1\"}[$__rate_interval])), 0.001)",
+          "expr": "sum(rate(llamacpp:prompt_tokens_total{host=\"gx10\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:prompt_seconds_total{host=\"gx10\"}[$__rate_interval])), 0.001)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1093,7 +1092,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:tokens_predicted_total{host=\"lake1\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:tokens_predicted_seconds_total{host=\"lake1\"}[$__rate_interval])), 0.001)",
+          "expr": "sum(rate(llamacpp:tokens_predicted_total{host=\"gx10\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:tokens_predicted_seconds_total{host=\"gx10\"}[$__rate_interval])), 0.001)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1150,7 +1149,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * ((sum(llamacpp:prompt_tokens_cached_total{host=\"lake1\"}) or vector(0)) / clamp_min((sum(llamacpp:prompt_tokens_cached_total{host=\"lake1\"}) or vector(0)) + (sum(llamacpp:prompt_tokens_total{host=\"lake1\"}) or vector(0)), 1))",
+          "expr": "100 * ((sum(llamacpp:prompt_tokens_cached_total{host=\"gx10\"}) or vector(0)) / clamp_min((sum(llamacpp:prompt_tokens_cached_total{host=\"gx10\"}) or vector(0)) + (sum(llamacpp:prompt_tokens_total{host=\"gx10\"}) or vector(0)), 1))",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1215,7 +1214,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * ((sum(llamacpp:spec_decode_num_accepted_tokens_total{host=\"lake1\"}) or vector(0)) / clamp_min(sum(llamacpp:spec_decode_num_draft_tokens_total{host=\"lake1\"}) or vector(0), 1))",
+          "expr": "100 * ((sum(llamacpp:spec_decode_num_accepted_tokens_total{host=\"gx10\"}) or vector(0)) / clamp_min(sum(llamacpp:spec_decode_num_draft_tokens_total{host=\"gx10\"}) or vector(0), 1))",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1280,7 +1279,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(llamacpp:requests_processing{host=\"lake1\"}) or vector(0)",
+          "expr": "sum(llamacpp:requests_processing{host=\"gx10\"}) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1337,7 +1336,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(llamacpp:requests_deferred{host=\"lake1\"}) or vector(0)",
+          "expr": "sum(llamacpp:requests_deferred{host=\"gx10\"}) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1398,7 +1397,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:tokens_predicted_total{host=\"lake1\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:tokens_predicted_seconds_total{host=\"lake1\"}[$__rate_interval])), 0.001)",
+          "expr": "sum(rate(llamacpp:tokens_predicted_total{host=\"gx10\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:tokens_predicted_seconds_total{host=\"gx10\"}[$__rate_interval])), 0.001)",
           "legendFormat": "decode tok/s",
           "refId": "A",
           "range": true
@@ -1408,7 +1407,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:prompt_tokens_total{host=\"lake1\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:prompt_seconds_total{host=\"lake1\"}[$__rate_interval])), 0.001)",
+          "expr": "sum(rate(llamacpp:prompt_tokens_total{host=\"gx10\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:prompt_seconds_total{host=\"gx10\"}[$__rate_interval])), 0.001)",
           "legendFormat": "prefill tok/s",
           "refId": "B",
           "range": true
@@ -1494,7 +1493,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:prompt_tokens_cached_total{host=\"lake1\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(rate(llamacpp:prompt_tokens_cached_total{host=\"gx10\"}[$__rate_interval])) or vector(0)",
           "legendFormat": "reused/s",
           "refId": "A",
           "range": true
@@ -1504,7 +1503,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:prompt_tokens_total{host=\"lake1\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(rate(llamacpp:prompt_tokens_total{host=\"gx10\"}[$__rate_interval])) or vector(0)",
           "legendFormat": "processed/s",
           "refId": "B",
           "range": true
@@ -1590,7 +1589,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * ((sum(rate(llamacpp:spec_decode_num_accepted_tokens_total{host=\"lake1\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(llamacpp:spec_decode_num_draft_tokens_total{host=\"lake1\"}[$__rate_interval])) or vector(0), 1))",
+          "expr": "100 * ((sum(rate(llamacpp:spec_decode_num_accepted_tokens_total{host=\"gx10\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(llamacpp:spec_decode_num_draft_tokens_total{host=\"gx10\"}[$__rate_interval])) or vector(0), 1))",
           "legendFormat": "acceptance %",
           "refId": "A",
           "range": true
@@ -1600,7 +1599,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "(sum(rate(llamacpp:spec_decode_num_draft_tokens_total{host=\"lake1\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(llamacpp:spec_decode_num_drafts_total{host=\"lake1\"}[$__rate_interval])) or vector(0), 1)",
+          "expr": "(sum(rate(llamacpp:spec_decode_num_draft_tokens_total{host=\"gx10\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(llamacpp:spec_decode_num_drafts_total{host=\"gx10\"}[$__rate_interval])) or vector(0), 1)",
           "legendFormat": "draft tokens per step",
           "refId": "B",
           "range": true
@@ -1686,7 +1685,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(llamacpp:requests_processing{host=\"lake1\"}) or vector(0)",
+          "expr": "sum(llamacpp:requests_processing{host=\"gx10\"}) or vector(0)",
           "legendFormat": "processing",
           "refId": "A",
           "range": true
@@ -1696,7 +1695,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(llamacpp:requests_deferred{host=\"lake1\"}) or vector(0)",
+          "expr": "sum(llamacpp:requests_deferred{host=\"gx10\"}) or vector(0)",
           "legendFormat": "deferred",
           "refId": "B",
           "range": true
@@ -1706,7 +1705,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "avg(llamacpp:n_busy_slots_per_decode{host=\"lake1\"}) or vector(0)",
+          "expr": "avg(llamacpp:n_busy_slots_per_decode{host=\"gx10\"}) or vector(0)",
           "legendFormat": "busy slots per decode",
           "refId": "C",
           "range": true
@@ -1774,7 +1773,7 @@
     {
       "id": 25,
       "type": "row",
-      "title": "Host \u2014 lake1",
+      "title": "Host \u2014 gx10",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1805,7 +1804,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\",host=\"lake1\"}[$__rate_interval])) * 100)",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\",host=\"gx10\"}[$__rate_interval])) * 100)",
           "legendFormat": "cpu busy %",
           "refId": "A",
           "range": true
@@ -1878,7 +1877,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 * (1 - node_memory_MemAvailable_bytes{host=\"lake1\"} / clamp_min(node_memory_MemTotal_bytes{host=\"lake1\"}, 1))",
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes{host=\"gx10\"} / clamp_min(node_memory_MemTotal_bytes{host=\"gx10\"}, 1))",
           "legendFormat": "memory used %",
           "refId": "A",
           "range": true
@@ -1951,7 +1950,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_network_receive_bytes_total{host=\"lake1\",device!~\"lo|veth.*|docker.*|br-.*\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_network_receive_bytes_total{host=\"gx10\",device!~\"lo|veth.*|docker.*|br-.*\"}[$__rate_interval]))",
           "legendFormat": "rx",
           "refId": "A",
           "range": true
@@ -1961,7 +1960,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_network_transmit_bytes_total{host=\"lake1\",device!~\"lo|veth.*|docker.*|br-.*\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_network_transmit_bytes_total{host=\"gx10\",device!~\"lo|veth.*|docker.*|br-.*\"}[$__rate_interval]))",
           "legendFormat": "tx",
           "refId": "B",
           "range": true
@@ -2016,7 +2015,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_disk_reads_completed_total{host=\"lake1\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_disk_reads_completed_total{host=\"gx10\"}[$__rate_interval]))",
           "legendFormat": "reads/s",
           "refId": "A",
           "range": true
@@ -2026,7 +2025,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_disk_writes_completed_total{host=\"lake1\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_disk_writes_completed_total{host=\"gx10\"}[$__rate_interval]))",
           "legendFormat": "writes/s",
           "refId": "B",
           "range": true

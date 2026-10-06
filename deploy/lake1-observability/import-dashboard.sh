@@ -50,6 +50,90 @@ if patched != 1:
              "upstream expression may have changed")
 
 print(f"energy cost -> {power_w:g}W @ ${rate:g}/kWh", file=sys.stderr)
+
+# Local GPU row. Upstream's only "GPU" number is vLLM's KV-cache usage, which stays
+# empty when gx10 runs llama.cpp instead of vLLM. These read nvidia_gpu_exporter
+# (container gx10-gpu-exporter, Prometheus job gx10-gpu) and work for any engine.
+# The row goes in above the host-telemetry row (y=13); everything below moves down.
+import copy
+
+GPU_Y, GPU_H = 13, 6
+G = 'nvidia_smi_'
+SEL = '{host="gx10"}'
+
+def gauge(eid, title, expr, unit, steps, desc, maxv=None):
+    el = copy.deepcopy(spec["elements"]["panel-25"])   # upstream MEMORY UTILIZATION gauge
+    s = el["spec"]
+    q = s["data"]["spec"]["queries"][0]["spec"]["query"]["spec"]
+    q["expr"], q["legendFormat"] = expr, title.lower()
+    s["title"], s["description"], s["id"] = title, desc, eid
+    d = s["vizConfig"]["spec"]["fieldConfig"]["defaults"]
+    d["unit"] = unit
+    d["thresholds"]["steps"] = [{"color": c, "value": v} for v, c in steps]
+    d.pop("max", None)
+    if maxv is not None:
+        d["max"] = maxv
+    return el
+
+def timeseries(eid, title, series, desc):
+    el = copy.deepcopy(spec["elements"]["panel-44"])   # upstream OUTPUT TOKENS / SEC OVER TIME
+    s = el["spec"]
+    tmpl = s["data"]["spec"]["queries"][0]
+    s["data"]["spec"]["queries"] = []
+    overrides = []
+    for i, (expr, legend, unit, color, right) in enumerate(series):
+        q = copy.deepcopy(tmpl)
+        q["spec"]["refId"] = "ABCD"[i]
+        q["spec"]["query"]["spec"]["expr"] = expr
+        q["spec"]["query"]["spec"]["legendFormat"] = legend
+        s["data"]["spec"]["queries"].append(q)
+        props = [{"id": "color", "value": {"fixedColor": color, "mode": "fixed"}},
+                 {"id": "unit", "value": unit}]
+        if right:
+            props.append({"id": "custom.axisPlacement", "value": "right"})
+        overrides.append({"matcher": {"id": "byName", "options": legend}, "properties": props})
+    s["vizConfig"]["spec"]["fieldConfig"]["overrides"] = overrides
+    s["title"], s["description"], s["id"] = title, desc, eid
+    return el
+
+GREEN, YELLOW, RED, BLUE = "#76B900", "#E5C100", "#FF4D4D", "#3D9DF3"
+new = {
+    "panel-201": (0, 4, gauge(201, "GPU UTILIZATION", f"100 * avg({G}utilization_gpu_ratio{SEL})", "percent",
+                              [(0, GREEN)], "GB10 busy time from nvidia-smi (any engine: vLLM, llama.cpp).",
+                              maxv=100)),
+    "panel-202": (4, 4, gauge(202, "GPU POWER", f"avg({G}power_draw_watts{SEL})", "watt",
+                              [(0, GREEN)], "GB10 GPU power draw from nvidia-smi. nvidia-smi reports no "
+                              "power limit for the GB10, so the gauge has no fixed maximum.")),
+    "panel-203": (8, 4, gauge(203, "GPU TEMPERATURE", f"avg({G}temperature_gpu{SEL})", "celsius",
+                              [(0, GREEN), (80, YELLOW), (88, RED)],
+                              "GB10 temperature. nvidia_smi_temperature_gpu_tlimit is the headroom to the "
+                              "slowdown limit; 84 C read 6 C below it under a sustained benchmark "
+                              "(2026-10-02).", maxv=100)),
+    "panel-204": (12, 4, gauge(204, "GPU SM CLOCK", f"avg({G}clocks_current_sm_clock_hz{SEL})", "hertz",
+                               [(0, GREEN)], "Current SM clock; a drop under load with a high temperature "
+                               "means thermal throttling.", maxv=3.003e9)),
+    "panel-205": (16, 8, timeseries(205, "GPU UTILIZATION / POWER OVER TIME", [
+        (f"100 * avg({G}utilization_gpu_ratio{SEL})", "gpu %", "percent", GREEN, False),
+        (f"avg({G}power_draw_watts{SEL})", "power (W)", "watt", BLUE, True),
+        (f"avg({G}temperature_gpu{SEL})", "temp (C)", "celsius", YELLOW, True),
+    ], "GB10 utilization (left axis), power and temperature (right axis) from nvidia-smi.")),
+}
+for eid in new:
+    if eid in spec["elements"]:
+        sys.exit(f"{eid} already exists upstream - pick other ids for the local GPU row")
+
+items = spec["layout"]["spec"]["items"]
+for it in items:
+    if it["spec"]["y"] >= GPU_Y:
+        it["spec"]["y"] += GPU_H
+for eid, (x, w, el) in new.items():
+    spec["elements"][eid] = el
+    tmpl = copy.deepcopy(items[0])
+    tmpl["spec"].update({"x": x, "y": GPU_Y, "width": w, "height": GPU_H})
+    tmpl["spec"]["element"]["name"] = eid
+    items.append(tmpl)
+print(f"GPU row -> {len(new)} panels at y={GPU_Y}", file=sys.stderr)
+
 json.dump({
     "apiVersion": "dashboard.grafana.app/v2beta1",
     "kind": "Dashboard",

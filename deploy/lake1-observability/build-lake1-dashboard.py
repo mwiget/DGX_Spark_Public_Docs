@@ -6,8 +6,48 @@ deliberate: v1 is far easier to generate correctly than hand-rolled v2
 elements/layout, and the migration is lossless for these panel types.
 
     ./build-lake1-dashboard.py > ../../Grafana_Dashboards/lake1/lake1_llamacpp.json
+    ./build-lake1-dashboard.py --host gx10 > grafana/provisioning/dashboards/json/gx10_llamacpp.json
+
+Every query is filtered by the Prometheus `host` label: since gx10's GPU exporter
+joined the same Prometheus (2026-10-02), an unfiltered avg(nvidia_smi_*) mixes the
+two GPUs.
 """
+import argparse
 import json
+import re
+
+HOSTS = {
+    "lake1": {"gpu": "RTX PRO 5000 Blackwell", "vram": True,
+              "llama": "Qwen3.8-27B Q8 + MTP (../claude-local)",
+              "title": "lake1 — RTX PRO 5000 + llama.cpp", "uid": "lake1-llamacpp",
+              "description": "RTX PRO 5000 Blackwell, llama-server (../claude-local) and host "
+                             "telemetry for lake1. Companion to the DGX Spark vLLM dashboard.",
+              "tags": ["lake1", "llama.cpp", "nvidia", "rtx-pro-5000", "claude-local"]},
+    # GB10: unified memory, so nvidia-smi reports no VRAM, no fan and no power limit.
+    "gx10": {"gpu": "GB10", "vram": False,
+             "llama": "Qwen3.8-Flash-Next IQ3_S, no MTP (~/llama-flashnext.log)",
+             "title": "gx10 — GB10 + llama.cpp", "uid": "gx10-llamacpp",
+             "description": "GB10, llama-server and host telemetry for gx10 when it runs "
+                            "llama.cpp instead of vLLM. Companion to the DGX Spark vLLM dashboard.",
+             "tags": ["gx10", "llama.cpp", "nvidia", "gb10"]},
+}
+ap = argparse.ArgumentParser()
+ap.add_argument("--host", choices=sorted(HOSTS), default="lake1")
+H = ap.parse_args().host
+HC = HOSTS[H]
+METRIC = re.compile(r'\b((?:nvidia_smi_|node_)\w+|llamacpp:\w+)(\{[^}]*\})?')
+
+
+def hostify(expr):
+    """Pin every metric to this host; existing host="..." matchers are rewritten."""
+    def sub(m):
+        name, sel = m.group(1), m.group(2)
+        if sel is None:
+            return f'{name}{{host="{H}"}}'
+        if "host=" in sel:
+            return name + re.sub(r'host="[^"]*"', f'host="{H}"', sel)
+        return f'{name}{{host="{H}",{sel[1:]}'
+    return METRIC.sub(sub, expr)
 
 DS = {"type": "prometheus", "uid": "dfr1d9ottv8xsc"}
 GREEN, AMBER, RED, BLUE = "#76B900", "#FF9830", "#F2495C", "#5794F2"
@@ -21,7 +61,7 @@ def nid():
 
 
 def targets(exprs):
-    return [{"datasource": DS, "expr": e, "legendFormat": l, "refId": chr(65 + i), "range": True}
+    return [{"datasource": DS, "expr": hostify(e), "legendFormat": l, "refId": chr(65 + i), "range": True}
             for i, (e, l) in enumerate(exprs)]
 
 
@@ -74,15 +114,24 @@ stat.x = 0
 ts.x = 0
 G = 'nvidia_smi_'
 
-row("GPU — RTX PRO 5000 Blackwell (lake1)")
+row(f"GPU — {HC['gpu']} ({H})")
 stat("GPU UTILIZATION", f"100 * (avg({G}utilization_gpu_ratio) or vector(0))", "percent",
      thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 90}])
-stat("VRAM USED", f"avg({G}memory_used_bytes) or vector(0)", "bytes",
-     desc="RTX PRO 5000 has 48 GB. llama-server with 2x131k slots measures ~46.3 GB.")
-stat("VRAM UTILIZATION",
-     f"100 * (avg({G}memory_used_bytes) / clamp_min(avg({G}memory_total_bytes), 1) or vector(0))",
-     "percent", thresholds=[{"color": GREEN, "value": None},
-                            {"color": AMBER, "value": 90}, {"color": RED, "value": 97}])
+if HC["vram"]:
+    stat("VRAM USED", f"avg({G}memory_used_bytes) or vector(0)", "bytes",
+         desc="RTX PRO 5000 has 48 GB. llama-server with 2x131k slots measures ~46.3 GB.")
+    stat("VRAM UTILIZATION",
+         f"100 * (avg({G}memory_used_bytes) / clamp_min(avg({G}memory_total_bytes), 1) or vector(0))",
+         "percent", thresholds=[{"color": GREEN, "value": None},
+                                {"color": AMBER, "value": 90}, {"color": RED, "value": 97}])
+else:
+    stat("UNIFIED MEMORY USED",
+         "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes", "bytes",
+         desc="GB10 shares one memory pool between CPU and GPU; nvidia-smi reports no VRAM.")
+    stat("UNIFIED MEMORY UTILIZATION",
+         "100 * (1 - node_memory_MemAvailable_bytes / clamp_min(node_memory_MemTotal_bytes, 1))",
+         "percent", thresholds=[{"color": GREEN, "value": None},
+                                {"color": AMBER, "value": 90}, {"color": RED, "value": 97}])
 stat("GPU TEMPERATURE", f"avg({G}temperature_gpu) or vector(0)", "celsius",
      thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 80},
                  {"color": RED, "value": 88}])
@@ -97,9 +146,15 @@ ts("GPU / MEMORY-CONTROLLER UTILIZATION",
    "percent", maxv=100, colors={"gpu": GREEN, "memory controller": BLUE},
    desc="Memory-controller utilization near 100% with GPU below it means "
         "bandwidth-bound decode — the expected shape for batch-1 LLM inference.")
-ts("VRAM USED vs TOTAL",
-   [(f"avg({G}memory_used_bytes)", "used"), (f"avg({G}memory_total_bytes)", "total")],
-   "bytes", colors={"used": GREEN, "total": "#808080"})
+if HC["vram"]:
+    ts("VRAM USED vs TOTAL",
+       [(f"avg({G}memory_used_bytes)", "used"), (f"avg({G}memory_total_bytes)", "total")],
+       "bytes", colors={"used": GREEN, "total": "#808080"})
+else:
+    ts("UNIFIED MEMORY USED vs TOTAL",
+       [("node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes", "used"),
+        ("node_memory_MemTotal_bytes", "total")],
+       "bytes", colors={"used": GREEN, "total": "#808080"})
 y[0] += 8
 
 ts("POWER DRAW vs LIMIT",
@@ -116,14 +171,15 @@ ts("CLOCKS", [(f"avg({G}clocks_current_sm_clock_hz)", "sm"),
               (f"avg({G}clocks_max_sm_clock_hz)", "sm max")], "hertz")
 ts("THROTTLE REASONS",
    [(f"avg({G}clocks_event_reasons_sw_power_cap)", "sw power cap"),
+    (f"avg({G}clocks_event_reasons_sw_thermal_slowdown)", "sw thermal"),
     (f"avg({G}clocks_event_reasons_hw_thermal_slowdown)", "hw thermal"),
     (f"avg({G}clocks_event_reasons_hw_power_brake_slowdown)", "hw power brake")],
-   "short", maxv=1, colors={"sw power cap": AMBER, "hw thermal": RED, "hw power brake": RED},
+   "short", maxv=1, colors={"sw power cap": AMBER, "sw thermal": AMBER, "hw thermal": RED, "hw power brake": RED},
    desc="1 = actively throttling. Sustained sw power cap means the card is at its limit.")
 y[0] += 8
 
 L = "llamacpp:"
-row("llama.cpp — Qwen3.8-27B Q8 + MTP (../claude-local)")
+row(f"llama.cpp — {HC['llama']}")
 # Derived from counters, NOT the *_tokens_seconds gauges: those report only
 # during active generation and read 0 whenever the server is idle, which makes
 # them useless on a dashboard you look at after the fact.
@@ -196,7 +252,7 @@ ts("SLOTS / QUEUE",
    desc="Two slots of 131k. deferred > 0 means both are busy.")
 y[0] += 8
 
-row("Host — lake1")
+row(f"Host — {H}")
 ts("CPU UTILIZATION",
    [('100 - (avg(rate(node_cpu_seconds_total{mode="idle",host="lake1"}[$__rate_interval])) * 100)',
      "cpu busy %")], "percent", maxv=100, colors={"cpu busy %": GREEN})
@@ -217,11 +273,10 @@ ts("DISK IOPS",
 y[0] += 8
 
 print(json.dumps({
-    "title": "lake1 — RTX PRO 5000 + llama.cpp",
-    "uid": "lake1-llamacpp",
-    "description": "RTX PRO 5000 Blackwell, llama-server (../claude-local) and host "
-                   "telemetry for lake1. Companion to the DGX Spark vLLM dashboard.",
-    "tags": ["lake1", "llama.cpp", "nvidia", "rtx-pro-5000", "claude-local"],
+    "title": HC["title"],
+    "uid": HC["uid"],
+    "description": HC["description"],
+    "tags": HC["tags"],
     "timezone": "browser", "editable": True, "schemaVersion": 39,
     "refresh": "10s", "time": {"from": "now-15m", "to": "now"},
     "panels": panels, "templating": {"list": []}, "annotations": {"list": []},

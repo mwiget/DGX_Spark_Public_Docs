@@ -1,0 +1,11 @@
+# File-provisioned dashboards: Grafana loads them at start, no admin password needed.
+# Only dashboards with a uid not already created through the API belong here
+# (gx10-llamacpp); dgx-spark-vllm-v1 and lake1-llamacpp are imported by API.
+apiVersion: 1
+providers:
+  - name: local
+    folder: ""
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
