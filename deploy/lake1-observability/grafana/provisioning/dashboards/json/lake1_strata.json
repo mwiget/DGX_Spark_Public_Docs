@@ -1019,8 +1019,8 @@
     {
       "id": 15,
       "type": "stat",
-      "title": "PREFILL TOK/S",
-      "description": "Newly read prompt tokens per second of prompt time. Measured 2026-11-06: ~1,750 tok/s marginal, plus ~4 s fixed per request, flat up to 237k context.",
+      "title": "DECODE TOK/S (LAST)",
+      "description": "Output speed of the most recent request(s), held for up to 1 h. ~30 tok/s chat, ~40 tok/s code; flat from 5k to 237k context (2026-11-06).",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1037,7 +1037,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:prompt_tokens_total{host=\"lake1\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:prompt_seconds_total{host=\"lake1\"}[$__rate_interval])), 0.001)",
+          "expr": "last_over_time((sum(rate(llamacpp:tokens_predicted_total{host=\"lake1\"}[1m])) / clamp_min(sum(rate(llamacpp:tokens_predicted_seconds_total{host=\"lake1\"}[1m])), 0.001) > 0)[1h:10s])",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1076,8 +1076,8 @@
     {
       "id": 16,
       "type": "stat",
-      "title": "DECODE TOK/S",
-      "description": "Generated tokens per second of decode time. ~30 tok/s chat, ~40 tok/s code; flat from 5k to 237k context.",
+      "title": "TTFT (LAST)",
+      "description": "Time to first token of the most recent request(s): prompt-reading time per request. Measured: 4.1 s + 0.57 s per 1k new prompt tokens; reused tokens are almost free.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1094,7 +1094,72 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(llamacpp:tokens_predicted_total{host=\"lake1\"}[$__rate_interval])) / clamp_min(sum(rate(llamacpp:tokens_predicted_seconds_total{host=\"lake1\"}[$__rate_interval])), 0.001)",
+          "expr": "last_over_time((sum(increase(llamacpp:prompt_seconds_total{host=\"lake1\"}[1m])) / clamp_min(sum(increase(strata:requests_total{host=\"lake1\"}[1m])), 1) > 0)[1h:10s])",
+          "legendFormat": "",
+          "refId": "A",
+          "range": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#76B900",
+                "value": null
+              },
+              {
+                "color": "#FF9830",
+                "value": 20
+              },
+              {
+                "color": "#F2495C",
+                "value": 60
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "PREFILL TOK/S (LAST)",
+      "description": "Newly read prompt tokens per second of prompt time, most recent request(s). Small turns read lower because of the ~4 s fixed cost; ~1,750 tok/s marginal.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfr1d9ottv8xsc"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "last_over_time((sum(rate(llamacpp:prompt_tokens_total{host=\"lake1\"}[1m])) / clamp_min(sum(rate(llamacpp:prompt_seconds_total{host=\"lake1\"}[1m])), 0.001) > 0)[1h:10s])",
           "legendFormat": "",
           "refId": "A",
           "range": true
@@ -1131,7 +1196,7 @@
       }
     },
     {
-      "id": 17,
+      "id": 18,
       "type": "stat",
       "title": "PREFIX CACHE HIT RATE",
       "description": "Reused / (reused + newly read) prompt tokens since the server started. Agent loops should sit above 90%.",
@@ -1141,8 +1206,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 6,
+        "w": 3,
+        "x": 9,
         "y": 30
       },
       "targets": [
@@ -1196,7 +1261,7 @@
       }
     },
     {
-      "id": 18,
+      "id": 19,
       "type": "stat",
       "title": "MODEL LOADED",
       "description": "1 = DeepSeek is loaded and answering. 0 / no data: strata-deepseek is stopped (lake1-gpu media) or still loading (~95 s).",
@@ -1207,7 +1272,7 @@
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 10,
+        "x": 12,
         "y": 30
       },
       "targets": [
@@ -1257,7 +1322,7 @@
       }
     },
     {
-      "id": 19,
+      "id": 20,
       "type": "stat",
       "title": "REQUESTS",
       "description": "Requests answered in the selected time range.",
@@ -1268,7 +1333,7 @@
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 13,
+        "x": 15,
         "y": 30
       },
       "targets": [
@@ -1314,7 +1379,7 @@
       }
     },
     {
-      "id": 20,
+      "id": 21,
       "type": "stat",
       "title": "PROCESSING",
       "description": "",
@@ -1324,8 +1389,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 16,
+        "w": 3,
+        "x": 18,
         "y": 30
       },
       "targets": [
@@ -1371,7 +1436,7 @@
       }
     },
     {
-      "id": 21,
+      "id": 22,
       "type": "stat",
       "title": "WAITING",
       "description": "Strata answers one request at a time; non-zero means requests are queueing (e.g. a long prompt is being read).",
@@ -1381,8 +1446,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 20,
+        "w": 3,
+        "x": 21,
         "y": 30
       },
       "targets": [
@@ -1432,7 +1497,7 @@
       }
     },
     {
-      "id": 22,
+      "id": 23,
       "type": "timeseries",
       "title": "SPEED",
       "description": "Counter-derived. The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.",
@@ -1528,7 +1593,7 @@
       }
     },
     {
-      "id": 23,
+      "id": 24,
       "type": "timeseries",
       "title": "PROMPT TOKENS: REUSED vs READ",
       "description": "Wall-clock rates. Reused tokens come from the engine's conversation cache and cost almost nothing; only the read tokens pay prefill time.",
@@ -1624,7 +1689,103 @@
       }
     },
     {
-      "id": 24,
+      "id": 25,
+      "type": "timeseries",
+      "title": "TTFT PER REQUEST",
+      "description": "Per request, averaged over 1 min windows: prompt time (= time to first token) and decode time. Gaps are idle periods.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfr1d9ottv8xsc"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "(sum(increase(llamacpp:prompt_seconds_total{host=\"lake1\"}[1m])) / clamp_min(sum(increase(strata:requests_total{host=\"lake1\"}[1m])), 1)) > 0",
+          "legendFormat": "ttft (prompt s/request)",
+          "refId": "A",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "(sum(increase(llamacpp:tokens_predicted_seconds_total{host=\"lake1\"}[1m])) / clamp_min(sum(increase(strata:requests_total{host=\"lake1\"}[1m])), 1)) > 0",
+          "legendFormat": "decode s/request",
+          "refId": "B",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ttft (prompt s/request)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "decode s/request"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#76B900"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 26,
       "type": "timeseries",
       "title": "REQUESTS / QUEUE",
       "description": "",
@@ -1635,7 +1796,7 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
+        "x": 12,
         "y": 42
       },
       "targets": [
@@ -1745,7 +1906,7 @@
       }
     },
     {
-      "id": 25,
+      "id": 27,
       "type": "timeseries",
       "title": "TOOL CALLS / DRAFTER",
       "description": "Tool calls the server had to repair or could not parse from the model's DSML output. DSpark (drafter) is auto and stays off on lake1 (tune: forced on is slower), so acceptance reads 0.",
@@ -1756,7 +1917,7 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
+        "x": 0,
         "y": 42
       },
       "targets": [
@@ -1851,7 +2012,7 @@
       }
     },
     {
-      "id": 26,
+      "id": 28,
       "type": "row",
       "title": "Host \u2014 lake1",
       "collapsed": false,
@@ -1864,7 +2025,7 @@
       "panels": []
     },
     {
-      "id": 27,
+      "id": 29,
       "type": "timeseries",
       "title": "CPU UTILIZATION",
       "description": "",
@@ -1937,7 +2098,7 @@
       }
     },
     {
-      "id": 28,
+      "id": 30,
       "type": "timeseries",
       "title": "MEMORY UTILIZATION",
       "description": "",
@@ -2010,7 +2171,7 @@
       }
     },
     {
-      "id": 29,
+      "id": 31,
       "type": "timeseries",
       "title": "NETWORK RX / TX",
       "description": "",
@@ -2075,7 +2236,7 @@
       }
     },
     {
-      "id": 30,
+      "id": 32,
       "type": "timeseries",
       "title": "DISK IOPS",
       "description": "",

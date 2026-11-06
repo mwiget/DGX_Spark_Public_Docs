@@ -258,32 +258,47 @@ def strata_row():
     # Strata exposes llama.cpp-compatible counters (prompt_tokens_total EXCLUDES reused
     # tokens, like llama.cpp) plus its own strata:* counters. One request at a time
     # (no --parallel), so per-stream and aggregate speeds are the same.
-    stat("PREFILL TOK/S",
-         f"sum(rate({L}prompt_tokens_total[$__rate_interval])) / "
-         f"clamp_min(sum(rate({L}prompt_seconds_total[$__rate_interval])), 0.001)", "short", w=3,
-         desc="Newly read prompt tokens per second of prompt time. Measured 2026-11-06: ~1,750 tok/s "
-              "marginal, plus ~4 s fixed per request, flat up to 237k context.")
-    stat("DECODE TOK/S",
-         f"sum(rate({L}tokens_predicted_total[$__rate_interval])) / "
-         f"clamp_min(sum(rate({L}tokens_predicted_seconds_total[$__rate_interval])), 0.001)", "short", w=3,
-         desc="Generated tokens per second of decode time. ~30 tok/s chat, ~40 tok/s code; "
-              "flat from 5k to 237k context.")
+    # The stats show the LAST request's values: a plain rate over $__rate_interval reads 0
+    # a few seconds after a request ends, which looks like "no data" on an idle server.
+    # last_over_time over a 1h subquery keeps the most recent non-zero window.
+    def last(expr):
+        return f"last_over_time(({expr} > 0)[1h:10s])"
+    PREFILL = (f"sum(rate({L}prompt_tokens_total[1m])) / "
+               f"clamp_min(sum(rate({L}prompt_seconds_total[1m])), 0.001)")
+    DECODE = (f"sum(rate({L}tokens_predicted_total[1m])) / "
+              f"clamp_min(sum(rate({L}tokens_predicted_seconds_total[1m])), 0.001)")
+    # Strata has no TTFT metric; prompt seconds per request is the engine's time to the
+    # first token (2026-11-06: 9.1 s mean vs 11.3 s first-token on the latest request,
+    # which also counts the HTTP and template work around it).
+    TTFT = (f"sum(increase({L}prompt_seconds_total[1m])) / "
+            f"clamp_min(sum(increase({S}requests_total[1m])), 1)")
+    stat("DECODE TOK/S (LAST)", last(DECODE), "short", w=3,
+         desc="Output speed of the most recent request(s), held for up to 1 h. ~30 tok/s chat, "
+              "~40 tok/s code; flat from 5k to 237k context (2026-11-06).")
+    stat("TTFT (LAST)", last(TTFT), "s", w=3,
+         desc="Time to first token of the most recent request(s): prompt-reading time per request. "
+              "Measured: 4.1 s + 0.57 s per 1k new prompt tokens; reused tokens are almost free.",
+         thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 20},
+                     {"color": RED, "value": 60}])
+    stat("PREFILL TOK/S (LAST)", last(PREFILL), "short", w=3,
+         desc="Newly read prompt tokens per second of prompt time, most recent request(s). "
+              "Small turns read lower because of the ~4 s fixed cost; ~1,750 tok/s marginal.")
     stat("PREFIX CACHE HIT RATE",
          f"100 * ((sum({L}prompt_tokens_cached_total) or vector(0)) / "
          f"clamp_min((sum({L}prompt_tokens_cached_total) or vector(0)) + "
          f"(sum({L}prompt_tokens_total) or vector(0)), 1))", "percent",
          desc="Reused / (reused + newly read) prompt tokens since the server started. Agent loops "
               "should sit above 90%.",
-         thresholds=[{"color": RED, "value": None}, {"color": AMBER, "value": 40},
-                     {"color": GREEN, "value": 70}])
+         w=3, thresholds=[{"color": RED, "value": None}, {"color": AMBER, "value": 40},
+                          {"color": GREEN, "value": 70}])
     stat("MODEL LOADED", f"max({S}model_loaded) or vector(0)", "short", w=3,
          desc="1 = DeepSeek is loaded and answering. 0 / no data: strata-deepseek is stopped "
               "(lake1-gpu media) or still loading (~95 s).",
          thresholds=[{"color": RED, "value": None}, {"color": GREEN, "value": 1}])
     stat("REQUESTS", f"sum(increase({S}requests_total[$__range])) or vector(0)", "short", w=3,
          desc="Requests answered in the selected time range.")
-    stat("PROCESSING", f"sum({L}requests_processing) or vector(0)", "short", w=4)
-    stat("WAITING", f"sum({L}requests_deferred) or vector(0)", "short", w=4,
+    stat("PROCESSING", f"sum({L}requests_processing) or vector(0)", "short", w=3)
+    stat("WAITING", f"sum({L}requests_deferred) or vector(0)", "short", w=3,
          desc="Strata answers one request at a time; non-zero means requests are queueing "
               "(e.g. a long prompt is being read).",
          thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 1}])
@@ -306,6 +321,13 @@ def strata_row():
             "almost nothing; only the read tokens pay prefill time.")
     y[0] += 8
 
+    ts("TTFT PER REQUEST",
+       [(f"({TTFT}) > 0", "ttft (prompt s/request)"),
+        (f"(sum(increase({L}tokens_predicted_seconds_total[1m])) / "
+         f"clamp_min(sum(increase({S}requests_total[1m])), 1)) > 0", "decode s/request")],
+       "s", colors={"ttft (prompt s/request)": AMBER, "decode s/request": GREEN},
+       desc="Per request, averaged over 1 min windows: prompt time (= time to first token) and "
+            "decode time. Gaps are idle periods.")
     ts("REQUESTS / QUEUE",
        [(f"sum(rate({S}requests_total[$__rate_interval])) * 60 or vector(0)", "requests/min"),
         (f"sum({L}requests_processing) or vector(0)", "processing"),
