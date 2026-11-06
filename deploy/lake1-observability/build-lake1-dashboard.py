@@ -58,7 +58,7 @@ if ENGINE in ("vllm", "strata"):
     if ENGINE not in HC:
         ap.error(f"--engine {ENGINE} is not configured for --host {H}")
     HC = {**HC, **HC[ENGINE]}
-METRIC = re.compile(r'\b((?:nvidia_smi_|node_)\w+|llamacpp:\w+|vllm:\w+|strata:\w+)(\{[^}]*\})?')
+METRIC = re.compile(r'\b((?:nvidia_smi_|node_)\w+|llamacpp:\w+|vllm:\w+|strata:\w+|strata_\w+)(\{[^}]*\})?')
 
 
 def hostify(expr):
@@ -333,6 +333,24 @@ def strata_row():
         (f"sum({L}requests_processing) or vector(0)", "processing"),
         (f"sum({L}requests_deferred) or vector(0)", "waiting")],
        "short", colors={"requests/min": BLUE, "processing": GREEN, "waiting": RED})
+    y[0] += 8
+
+    # strata_memory_bytes comes from strata-memory.service (deploy/lake1-exporters) via
+    # node_exporter's textfile collector: the service's cgroup v2 memory.stat.
+    ts("STRATA RAM",
+       [('strata_memory_bytes{kind="experts"}', "experts + buffers"),
+        ('strata_memory_bytes{kind="pinned"}', "pinned GPU staging"),
+        ('strata_memory_bytes{kind="file_cache"}', "model file cache"),
+        ("node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes", "system used (all)"),
+        ("node_memory_MemTotal_bytes", "system total")],
+       "bytes", colors={"experts + buffers": GREEN, "pinned GPU staging": BLUE,
+                        "model file cache": "#808080", "system used (all)": AMBER,
+                        "system total": RED},
+       desc="System RAM held by strata-deepseek.service, by kind: the ~108 GB of experts the CPU "
+            "computes, pinned buffers for GPU copies, and page cache of the model files (the "
+            "kernel reclaims that first). Compare with all used RAM: lab VMs and Docker labs "
+            "need ~93 GB, more than is left while DeepSeek is loaded, so experts would then "
+            "be read from the SSD. Needs strata-memory.service on lake1.")
     ts("TOOL CALLS / DRAFTER",
        [(f"sum(rate({S}tool_args_repaired_total[$__rate_interval])) * 60 or vector(0)", "tool args repaired/min"),
         (f"sum(rate({S}tool_calls_unread_total[$__rate_interval])) * 60 or vector(0)", "tool calls unread/min"),

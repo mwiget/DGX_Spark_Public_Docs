@@ -1,0 +1,24 @@
+[Unit]
+Description=Publish strata-deepseek.service memory for node_exporter (textfile collector)
+Documentation=file:///home/mwiget/git/DGX_Spark_Public_Docs/deploy/lake1-exporters/strata-memory.sh
+
+[Service]
+# Install: sudo install -m 755 strata-memory.sh /usr/local/bin/strata-memory
+#          sudo install -m 644 strata-memory.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now strata-memory
+ExecStart=/usr/local/bin/strata-memory
+Restart=always
+RestartSec=10
+# Not DynamicUser: that puts the directory under /var/lib/private (0700), which the
+# node-exporter container (user nobody) cannot read.
+User=nobody
+Group=nogroup
+StateDirectory=node_exporter/textfile
+StateDirectoryMode=0755
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

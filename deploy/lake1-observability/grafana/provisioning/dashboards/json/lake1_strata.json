@@ -1908,6 +1908,177 @@
     {
       "id": 27,
       "type": "timeseries",
+      "title": "STRATA RAM",
+      "description": "System RAM held by strata-deepseek.service, by kind: the ~108 GB of experts the CPU computes, pinned buffers for GPU copies, and page cache of the model files (the kernel reclaims that first). Compare with all used RAM: lab VMs and Docker labs need ~93 GB, more than is left while DeepSeek is loaded, so experts would then be read from the SSD. Needs strata-memory.service on lake1.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfr1d9ottv8xsc"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "strata_memory_bytes{host=\"lake1\",kind=\"experts\"}",
+          "legendFormat": "experts + buffers",
+          "refId": "A",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "strata_memory_bytes{host=\"lake1\",kind=\"pinned\"}",
+          "legendFormat": "pinned GPU staging",
+          "refId": "B",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "strata_memory_bytes{host=\"lake1\",kind=\"file_cache\"}",
+          "legendFormat": "model file cache",
+          "refId": "C",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "node_memory_MemTotal_bytes{host=\"lake1\"} - node_memory_MemAvailable_bytes{host=\"lake1\"}",
+          "legendFormat": "system used (all)",
+          "refId": "D",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfr1d9ottv8xsc"
+          },
+          "expr": "node_memory_MemTotal_bytes{host=\"lake1\"}",
+          "legendFormat": "system total",
+          "refId": "E",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "experts + buffers"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#76B900"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pinned GPU staging"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "model file cache"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#808080"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "system used (all)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "system total"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2495C"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
       "title": "TOOL CALLS / DRAFTER",
       "description": "Tool calls the server had to repair or could not parse from the model's DSML output. DSpark (drafter) is auto and stays off on lake1 (tune: forced on is slower), so acceptance reads 0.",
       "datasource": {
@@ -1917,8 +2088,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 42
+        "x": 12,
+        "y": 50
       },
       "targets": [
         {
@@ -2012,7 +2183,7 @@
       }
     },
     {
-      "id": 28,
+      "id": 29,
       "type": "row",
       "title": "Host \u2014 lake1",
       "collapsed": false,
@@ -2020,12 +2191,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 58
       },
       "panels": []
     },
     {
-      "id": 29,
+      "id": 30,
       "type": "timeseries",
       "title": "CPU UTILIZATION",
       "description": "",
@@ -2037,7 +2208,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 51
+        "y": 59
       },
       "targets": [
         {
@@ -2098,7 +2269,7 @@
       }
     },
     {
-      "id": 30,
+      "id": 31,
       "type": "timeseries",
       "title": "MEMORY UTILIZATION",
       "description": "",
@@ -2110,7 +2281,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 51
+        "y": 59
       },
       "targets": [
         {
@@ -2171,7 +2342,7 @@
       }
     },
     {
-      "id": 31,
+      "id": 32,
       "type": "timeseries",
       "title": "NETWORK RX / TX",
       "description": "",
@@ -2183,7 +2354,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 59
+        "y": 67
       },
       "targets": [
         {
@@ -2236,7 +2407,7 @@
       }
     },
     {
-      "id": 32,
+      "id": 33,
       "type": "timeseries",
       "title": "DISK IOPS",
       "description": "",
@@ -2248,7 +2419,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 59
+        "y": 67
       },
       "targets": [
         {

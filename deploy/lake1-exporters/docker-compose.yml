@@ -21,6 +21,9 @@ services:
       - --path.sysfs=/host/sys
       - --path.rootfs=/host
       - --web.listen-address=:9100
+      # *.prom files from strata-memory.service (strata_memory_bytes etc., the
+      # Strata RAM panel). The directory exists only once that service has run.
+      - --collector.textfile.directory=/host/var/lib/node_exporter/textfile
       # An unreachable NFS/CIFS mount makes the filesystem collector block. At a
       # 5s scrape interval those pile up until node_exporter hits its 40-request
       # ceiling and every scrape returns "Limit of concurrent requests reached",
