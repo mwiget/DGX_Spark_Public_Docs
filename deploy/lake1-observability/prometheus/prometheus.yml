@@ -57,11 +57,14 @@ scrape_configs:
       - targets: ["192.168.68.113:9835"]
         labels: {host: lake1}
 
-  # llama-server behind ../claude-local. Needs BOTH --metrics and a bind address
-  # the Prometheus container can reach; it currently listens on 127.0.0.1 only,
-  # so this target stays DOWN until serve-lake1.sh is updated and restarted.
+  # lake1's LLM server behind ../claude-local and airouter `big`. Since 2026-11-06:
+  # Strata serving DeepSeek V4.1 Flash 1017 (strata-deepseek.service, :8091, 0.0.0.0).
+  # Strata's Prometheus text is at /metrics/prometheus (/metrics is JSON) and uses
+  # llama.cpp-compatible names (llamacpp:*) plus strata:*, so the job name stays.
+  # Before: Qwen3.8-27B llama-server on :8090 (llama-swap, now disabled).
+  # DOWN while `lake1-gpu media` has stopped it for ComfyUI - expected.
   - job_name: llamacpp
-    metrics_path: /metrics
+    metrics_path: /metrics/prometheus
     static_configs:
-      - targets: ["192.168.68.113:8090"]
-        labels: {host: lake1}
+      - targets: ["192.168.68.113:8091"]
+        labels: {host: lake1, engine: strata}

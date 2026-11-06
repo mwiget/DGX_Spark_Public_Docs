@@ -8,6 +8,7 @@ elements/layout, and the migration is lossless for these panel types.
     ./build-lake1-dashboard.py > ../../Grafana_Dashboards/lake1/lake1_llamacpp.json
     ./build-lake1-dashboard.py --host gx10 > grafana/provisioning/dashboards/json/gx10_llamacpp.json
     ./build-lake1-dashboard.py --host gx10 --engine vllm > grafana/provisioning/dashboards/json/gx10_vllm.json
+    ./build-lake1-dashboard.py --engine strata > grafana/provisioning/dashboards/json/lake1_strata.json
 
 Every query is filtered by the Prometheus `host` label: since gx10's GPU exporter
 joined the same Prometheus (2026-10-02), an unfiltered avg(nvidia_smi_*) mixes the
@@ -23,7 +24,15 @@ HOSTS = {
               "title": "lake1 — RTX PRO 5000 + llama.cpp", "uid": "lake1-llamacpp",
               "description": "RTX PRO 5000 Blackwell, llama-server (../claude-local) and host "
                              "telemetry for lake1. Companion to the DGX Spark vLLM dashboard.",
-              "tags": ["lake1", "llama.cpp", "nvidia", "rtx-pro-5000", "claude-local"]},
+              "tags": ["lake1", "llama.cpp", "nvidia", "rtx-pro-5000", "claude-local"],
+              # --engine strata: DeepSeek V4.1 Flash 1017 via Strata (strata-deepseek.service, :8091)
+              # since 2026-11-06; replaced the Qwen3.8-27B llama-server. Strata serves
+              # llama.cpp-compatible counters plus strata:* at /metrics/prometheus.
+              "strata": {"model": "DeepSeek V4.1 Flash 1017, ISTA-DAS 2.25 bpw, 256k ctx (strata-deepseek)",
+                         "title": "lake1 — RTX PRO 5000 + Strata DeepSeek", "uid": "lake1-strata",
+                         "description": "RTX PRO 5000 Blackwell, Strata (DeepSeek V4.1 Flash 1017) and host "
+                                        "telemetry for lake1. airouter alias `big`, ../claude-local.",
+                         "tags": ["lake1", "strata", "deepseek", "nvidia", "rtx-pro-5000", "claude-local"]}},
     # GB10: unified memory, so nvidia-smi reports no VRAM, no fan and no power limit.
     "gx10": {"gpu": "GB10", "vram": False,
              "llama": "Qwen3.8-Flash-Next IQ3_S, no MTP (~/llama-flashnext.log)",
@@ -41,13 +50,15 @@ HOSTS = {
 }
 ap = argparse.ArgumentParser()
 ap.add_argument("--host", choices=sorted(HOSTS), default="lake1")
-ap.add_argument("--engine", choices=["llamacpp", "vllm"], default="llamacpp")
+ap.add_argument("--engine", choices=["llamacpp", "vllm", "strata"], default="llamacpp")
 ARGS = ap.parse_args()
 H, ENGINE = ARGS.host, ARGS.engine
 HC = HOSTS[H]
-if ENGINE == "vllm":
-    HC = {**HC, **HC["vllm"]}
-METRIC = re.compile(r'\b((?:nvidia_smi_|node_)\w+|llamacpp:\w+|vllm:\w+)(\{[^}]*\})?')
+if ENGINE in ("vllm", "strata"):
+    if ENGINE not in HC:
+        ap.error(f"--engine {ENGINE} is not configured for --host {H}")
+    HC = {**HC, **HC[ENGINE]}
+METRIC = re.compile(r'\b((?:nvidia_smi_|node_)\w+|llamacpp:\w+|vllm:\w+|strata:\w+)(\{[^}]*\})?')
 
 
 def hostify(expr):
@@ -241,6 +252,76 @@ def vllm_row():
     y[0] += 8
 
 
+def strata_row():
+    L, S = "llamacpp:", "strata:"
+    row(f"Strata — {HC['model']}")
+    # Strata exposes llama.cpp-compatible counters (prompt_tokens_total EXCLUDES reused
+    # tokens, like llama.cpp) plus its own strata:* counters. One request at a time
+    # (no --parallel), so per-stream and aggregate speeds are the same.
+    stat("PREFILL TOK/S",
+         f"sum(rate({L}prompt_tokens_total[$__rate_interval])) / "
+         f"clamp_min(sum(rate({L}prompt_seconds_total[$__rate_interval])), 0.001)", "short", w=3,
+         desc="Newly read prompt tokens per second of prompt time. Measured 2026-11-06: ~1,750 tok/s "
+              "marginal, plus ~4 s fixed per request, flat up to 237k context.")
+    stat("DECODE TOK/S",
+         f"sum(rate({L}tokens_predicted_total[$__rate_interval])) / "
+         f"clamp_min(sum(rate({L}tokens_predicted_seconds_total[$__rate_interval])), 0.001)", "short", w=3,
+         desc="Generated tokens per second of decode time. ~30 tok/s chat, ~40 tok/s code; "
+              "flat from 5k to 237k context.")
+    stat("PREFIX CACHE HIT RATE",
+         f"100 * ((sum({L}prompt_tokens_cached_total) or vector(0)) / "
+         f"clamp_min((sum({L}prompt_tokens_cached_total) or vector(0)) + "
+         f"(sum({L}prompt_tokens_total) or vector(0)), 1))", "percent",
+         desc="Reused / (reused + newly read) prompt tokens since the server started. Agent loops "
+              "should sit above 90%.",
+         thresholds=[{"color": RED, "value": None}, {"color": AMBER, "value": 40},
+                     {"color": GREEN, "value": 70}])
+    stat("MODEL LOADED", f"max({S}model_loaded) or vector(0)", "short", w=3,
+         desc="1 = DeepSeek is loaded and answering. 0 / no data: strata-deepseek is stopped "
+              "(lake1-gpu media) or still loading (~95 s).",
+         thresholds=[{"color": RED, "value": None}, {"color": GREEN, "value": 1}])
+    stat("REQUESTS", f"sum(increase({S}requests_total[$__range])) or vector(0)", "short", w=3,
+         desc="Requests answered in the selected time range.")
+    stat("PROCESSING", f"sum({L}requests_processing) or vector(0)", "short", w=4)
+    stat("WAITING", f"sum({L}requests_deferred) or vector(0)", "short", w=4,
+         desc="Strata answers one request at a time; non-zero means requests are queueing "
+              "(e.g. a long prompt is being read).",
+         thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 1}])
+    y[0] += 4
+
+    ts("SPEED",
+       [(f"sum(rate({L}tokens_predicted_total[$__rate_interval])) / "
+         f"clamp_min(sum(rate({L}tokens_predicted_seconds_total[$__rate_interval])), 0.001)",
+         "decode tok/s"),
+        (f"sum(rate({L}prompt_tokens_total[$__rate_interval])) / "
+         f"clamp_min(sum(rate({L}prompt_seconds_total[$__rate_interval])), 0.001)",
+         "prefill tok/s")], "short",
+       colors={"prefill tok/s": BLUE, "decode tok/s": GREEN},
+       desc="Counter-derived. The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.")
+    ts("PROMPT TOKENS: REUSED vs READ",
+       [(f"sum(rate({L}prompt_tokens_cached_total[$__rate_interval])) or vector(0)", "reused/s"),
+        (f"sum(rate({L}prompt_tokens_total[$__rate_interval])) or vector(0)", "read/s")],
+       "short", colors={"reused/s": GREEN, "read/s": AMBER},
+       desc="Wall-clock rates. Reused tokens come from the engine's conversation cache and cost "
+            "almost nothing; only the read tokens pay prefill time.")
+    y[0] += 8
+
+    ts("REQUESTS / QUEUE",
+       [(f"sum(rate({S}requests_total[$__rate_interval])) * 60 or vector(0)", "requests/min"),
+        (f"sum({L}requests_processing) or vector(0)", "processing"),
+        (f"sum({L}requests_deferred) or vector(0)", "waiting")],
+       "short", colors={"requests/min": BLUE, "processing": GREEN, "waiting": RED})
+    ts("TOOL CALLS / DRAFTER",
+       [(f"sum(rate({S}tool_args_repaired_total[$__rate_interval])) * 60 or vector(0)", "tool args repaired/min"),
+        (f"sum(rate({S}tool_calls_unread_total[$__rate_interval])) * 60 or vector(0)", "tool calls unread/min"),
+        (f"100 * ((sum(rate({S}drafts_accepted_total[$__rate_interval])) or vector(0)) / "
+         f"clamp_min(sum(rate({S}drafts_offered_total[$__rate_interval])) or vector(0), 1))", "DSpark acceptance %")],
+       "short", colors={"tool args repaired/min": AMBER, "tool calls unread/min": RED},
+       desc="Tool calls the server had to repair or could not parse from the model's DSML output. "
+            "DSpark (drafter) is auto and stays off on lake1 (tune: forced on is slower), so acceptance reads 0.")
+    y[0] += 8
+
+
 stat.x = 0
 ts.x = 0
 G = 'nvidia_smi_'
@@ -384,6 +465,8 @@ if ENGINE == "llamacpp":
        desc="Two slots of 131k. deferred > 0 means both are busy.")
     y[0] += 8
 
+elif ENGINE == "strata":
+    strata_row()
 else:
     vllm_row()
 
