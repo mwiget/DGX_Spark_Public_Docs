@@ -1500,7 +1500,7 @@
       "id": 23,
       "type": "timeseries",
       "title": "SPEED",
-      "description": "Counter-derived. The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.",
+      "description": "Counter-derived. Decode (right axis, ~10-40 tok/s) would sit flat at the bottom of the prefill scale (~1k tok/s). The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1586,6 +1586,18 @@
                   "mode": "fixed",
                   "fixedColor": "#76B900"
                 }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "decode tok/s"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
               }
             ]
           }
@@ -2216,7 +2228,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\",host=\"lake1\"}[$__rate_interval])) * 100)",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\",host=\"lake1\"}[1m])) * 100)",
           "legendFormat": "cpu busy %",
           "refId": "A",
           "range": true
@@ -2362,7 +2374,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_network_receive_bytes_total{host=\"lake1\",device!~\"lo|veth.*|docker.*|br-.*\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_network_receive_bytes_total{host=\"lake1\",device!~\"lo|veth.*|docker.*|br-.*\"}[1m]))",
           "legendFormat": "rx",
           "refId": "A",
           "range": true
@@ -2372,7 +2384,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_network_transmit_bytes_total{host=\"lake1\",device!~\"lo|veth.*|docker.*|br-.*\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_network_transmit_bytes_total{host=\"lake1\",device!~\"lo|veth.*|docker.*|br-.*\"}[1m]))",
           "legendFormat": "tx",
           "refId": "B",
           "range": true
@@ -2427,7 +2439,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_disk_reads_completed_total{host=\"lake1\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_disk_reads_completed_total{host=\"lake1\"}[1m]))",
           "legendFormat": "reads/s",
           "refId": "A",
           "range": true
@@ -2437,7 +2449,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_disk_writes_completed_total{host=\"lake1\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_disk_writes_completed_total{host=\"lake1\"}[1m]))",
           "legendFormat": "writes/s",
           "refId": "B",
           "range": true

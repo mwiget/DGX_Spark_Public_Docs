@@ -2375,7 +2375,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\",host=\"gx10\"}[$__rate_interval])) * 100)",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\",host=\"gx10\"}[1m])) * 100)",
           "legendFormat": "cpu busy %",
           "refId": "A",
           "range": true
@@ -2521,7 +2521,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_network_receive_bytes_total{host=\"gx10\",device!~\"lo|veth.*|docker.*|br-.*\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_network_receive_bytes_total{host=\"gx10\",device!~\"lo|veth.*|docker.*|br-.*\"}[1m]))",
           "legendFormat": "rx",
           "refId": "A",
           "range": true
@@ -2531,7 +2531,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_network_transmit_bytes_total{host=\"gx10\",device!~\"lo|veth.*|docker.*|br-.*\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_network_transmit_bytes_total{host=\"gx10\",device!~\"lo|veth.*|docker.*|br-.*\"}[1m]))",
           "legendFormat": "tx",
           "refId": "B",
           "range": true
@@ -2586,7 +2586,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_disk_reads_completed_total{host=\"gx10\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_disk_reads_completed_total{host=\"gx10\"}[1m]))",
           "legendFormat": "reads/s",
           "refId": "A",
           "range": true
@@ -2596,7 +2596,7 @@
             "type": "prometheus",
             "uid": "dfr1d9ottv8xsc"
           },
-          "expr": "sum(rate(node_disk_writes_completed_total{host=\"gx10\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_disk_writes_completed_total{host=\"gx10\"}[1m]))",
           "legendFormat": "writes/s",
           "refId": "B",
           "range": true

@@ -102,7 +102,7 @@ def stat(title, expr, unit, w=4, h=4, thresholds=None, desc=""):
     panels.append(p)
 
 
-def ts(title, exprs, unit, w=12, h=8, desc="", stack=False, maxv=None, colors=None):
+def ts(title, exprs, unit, w=12, h=8, desc="", stack=False, maxv=None, colors=None, right=()):
     fc = {"unit": unit, "color": {"mode": "palette-classic"},
           "custom": {"lineWidth": 2, "fillOpacity": 12, "showPoints": "never",
                      "stacking": {"mode": "normal" if stack else "none"}}}
@@ -114,6 +114,9 @@ def ts(title, exprs, unit, w=12, h=8, desc="", stack=False, maxv=None, colors=No
         for name, col in colors.items():
             ov.append({"matcher": {"id": "byName", "options": name},
                        "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": col}}]})
+    for name in right:   # series on their own right-hand axis (a different scale)
+        ov.append({"matcher": {"id": "byName", "options": name},
+                   "properties": [{"id": "custom.axisPlacement", "value": "right"}]})
     panels.append({"id": nid(), "type": "timeseries", "title": title, "description": desc,
                    "datasource": DS, "gridPos": {"h": h, "w": w, "x": ts.x, "y": y[0]},
                    "targets": targets(exprs),
@@ -311,8 +314,9 @@ def strata_row():
         (f"sum(rate({L}prompt_tokens_total[$__rate_interval])) / "
          f"clamp_min(sum(rate({L}prompt_seconds_total[$__rate_interval])), 0.001)",
          "prefill tok/s")], "short",
-       colors={"prefill tok/s": BLUE, "decode tok/s": GREEN},
-       desc="Counter-derived. The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.")
+       colors={"prefill tok/s": BLUE, "decode tok/s": GREEN}, right=("decode tok/s",),
+       desc="Counter-derived. Decode (right axis, ~10-40 tok/s) would sit flat at the bottom of the "
+            "prefill scale (~1k tok/s). The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.")
     ts("PROMPT TOKENS: REUSED vs READ",
        [(f"sum(rate({L}prompt_tokens_cached_total[$__rate_interval])) or vector(0)", "reused/s"),
         (f"sum(rate({L}prompt_tokens_total[$__rate_interval])) or vector(0)", "read/s")],
@@ -510,9 +514,12 @@ elif ENGINE == "strata":
 else:
     vllm_row()
 
+# Host rates use [1m], not $__rate_interval: the datasource timeInterval is 5s, so
+# $__rate_interval is ~20s, but node exporters are scraped every 15s, and a 20s
+# window often holds one sample - CPU, network and disk panels then read empty.
 row(f"Host — {H}")
 ts("CPU UTILIZATION",
-   [('100 - (avg(rate(node_cpu_seconds_total{mode="idle",host="lake1"}[$__rate_interval])) * 100)',
+   [('100 - (avg(rate(node_cpu_seconds_total{mode="idle",host="lake1"}[1m])) * 100)',
      "cpu busy %")], "percent", maxv=100, colors={"cpu busy %": GREEN})
 ts("MEMORY UTILIZATION",
    [('100 * (1 - node_memory_MemAvailable_bytes{host="lake1"} '
@@ -521,12 +528,12 @@ ts("MEMORY UTILIZATION",
 y[0] += 8
 
 ts("NETWORK RX / TX",
-   [('sum(rate(node_network_receive_bytes_total{host="lake1",device!~"lo|veth.*|docker.*|br-.*"}[$__rate_interval]))', "rx"),
-    ('sum(rate(node_network_transmit_bytes_total{host="lake1",device!~"lo|veth.*|docker.*|br-.*"}[$__rate_interval]))', "tx")],
+   [('sum(rate(node_network_receive_bytes_total{host="lake1",device!~"lo|veth.*|docker.*|br-.*"}[1m]))', "rx"),
+    ('sum(rate(node_network_transmit_bytes_total{host="lake1",device!~"lo|veth.*|docker.*|br-.*"}[1m]))', "tx")],
    "Bps")
 ts("DISK IOPS",
-   [('sum(rate(node_disk_reads_completed_total{host="lake1"}[$__rate_interval]))', "reads/s"),
-    ('sum(rate(node_disk_writes_completed_total{host="lake1"}[$__rate_interval]))', "writes/s")],
+   [('sum(rate(node_disk_reads_completed_total{host="lake1"}[1m]))', "reads/s"),
+    ('sum(rate(node_disk_writes_completed_total{host="lake1"}[1m]))', "writes/s")],
    "iops")
 y[0] += 8
 
