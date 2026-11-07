@@ -25,12 +25,12 @@ HOSTS = {
               "description": "RTX PRO 5000 Blackwell, llama-server (../claude-local) and host "
                              "telemetry for lake1. Companion to the DGX Spark vLLM dashboard.",
               "tags": ["lake1", "llama.cpp", "nvidia", "rtx-pro-5000", "claude-local"],
-              # --engine strata: Strata on :8091 since 2026-11-06 (replaced the Qwen3.8-27B
-              # llama-server). One of two units at a time, switched by lake1-gpu:
-              # strata-qwen (Qwen3.8-Flash-Next IQ3_S, default since 2026-11-07) or
-              # strata-deepseek (DeepSeek V4.1 Flash 1017). Strata serves llama.cpp-compatible
+              # --engine strata: Strata since 2026-11-06 (replaced the Qwen3.8-27B llama-server).
+              # Since 2026-11-07 llama-swap on :8091 swaps two Strata models on the GPU by request
+              # model name: Qwen3.8-Flash-Next IQ3_S (:18092, preloaded) and DeepSeek V4.1 Flash
+              # 1017 (:18091); Prometheus scrapes each port. Strata serves llama.cpp-compatible
               # counters plus strata:* at /metrics/prometheus.
-              "strata": {"model": "Qwen3.8-Flash-Next IQ3_S (strata-qwen) or DeepSeek V4.1 Flash 2.25 bpw (strata-deepseek), 256k ctx",
+              "strata": {"model": "Qwen3.8-Flash-Next IQ3_S or DeepSeek V4.1 Flash 2.25 bpw via llama-swap, 256k ctx",
                          "title": "lake1 — RTX PRO 5000 + Strata", "uid": "lake1-strata",
                          "description": "RTX PRO 5000 Blackwell, Strata (Qwen3.8-Flash-Next or DeepSeek V4.1 Flash) and host "
                                         "telemetry for lake1. airouter alias `big`, ../claude-local.",
@@ -297,8 +297,8 @@ def strata_row():
          w=3, thresholds=[{"color": RED, "value": None}, {"color": AMBER, "value": 40},
                           {"color": GREEN, "value": 70}])
     stat("MODEL LOADED", f"max({S}model_loaded) or vector(0)", "short", w=3,
-         desc="1 = the model is loaded and answering. 0 / no data: both Strata units are stopped "
-              "(lake1-gpu media) or one is still loading (Qwen ~30 s, DeepSeek ~95 s).",
+         desc="1 = a model is loaded and answering. 0 / no data: llama-swap has unloaded it "
+              "(lake1-gpu media) or is swapping (to Qwen ~30 s, to DeepSeek 1.5-3 min).",
          thresholds=[{"color": RED, "value": None}, {"color": GREEN, "value": 1}])
     stat("REQUESTS", f"sum(increase({S}requests_total[$__range])) or vector(0)", "short", w=3,
          desc="Requests answered in the selected time range.")
@@ -352,7 +352,7 @@ def strata_row():
        "bytes", colors={"experts + buffers": GREEN, "pinned GPU staging": BLUE,
                         "model file cache": "#808080", "system used (all)": AMBER,
                         "system total": RED},
-       desc="System RAM held by the running Strata unit (strata-qwen or strata-deepseek), by kind: "
+       desc="System RAM held by the Strata model llama-swap has loaded (label model=), by kind: "
             "the experts in RAM (~108 GB for DeepSeek, ~52 GB for Qwen, which also keeps ~38 GB "
             "of them on the GPU), pinned buffers for GPU copies and the off-GPU "
             "context, and page cache of the model files (the kernel reclaims that first). "

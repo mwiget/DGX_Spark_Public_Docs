@@ -57,14 +57,19 @@ scrape_configs:
       - targets: ["192.168.68.113:9835"]
         labels: {host: lake1}
 
-  # lake1's LLM server behind ../claude-local and airouter `big`. Since 2026-11-06:
-  # Strata serving DeepSeek V4.1 Flash 1017 (strata-deepseek.service, :8091, 0.0.0.0).
+  # lake1's LLM servers behind ../claude-local and airouter `big`. Since 2026-11-07
+  # llama-swap on :8091 swaps two Strata models on the one GPU by request model name;
+  # each Strata listens on its own fixed port, scraped here directly (llama-swap does
+  # not pass /metrics/prometheus, and its /upstream/ route would load the model):
+  #   :18092 Qwen3.8-Flash-Next IQ3_S (default)   :18091 DeepSeek V4.1 Flash 1017
+  # Exactly one is UP at a time (none during `lake1-gpu media`) - expected.
   # Strata's Prometheus text is at /metrics/prometheus (/metrics is JSON) and uses
   # llama.cpp-compatible names (llamacpp:*) plus strata:*, so the job name stays.
-  # Before: Qwen3.8-27B llama-server on :8090 (llama-swap, now disabled).
-  # DOWN while `lake1-gpu media` has stopped it for ComfyUI - expected.
+  # 2026-11-06: DeepSeek only, :8091. Before: Qwen3.8-27B llama-server on :8090.
   - job_name: llamacpp
     metrics_path: /metrics/prometheus
     static_configs:
-      - targets: ["192.168.68.113:8091"]
-        labels: {host: lake1, engine: strata}
+      - targets: ["192.168.68.113:18092"]
+        labels: {host: lake1, engine: strata, model: qwen3.8-flash-next-iq3_s}
+      - targets: ["192.168.68.113:18091"]
+        labels: {host: lake1, engine: strata, model: deepseek-v4.1-flash}
