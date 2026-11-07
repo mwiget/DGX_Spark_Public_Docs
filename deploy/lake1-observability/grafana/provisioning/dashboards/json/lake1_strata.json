@@ -1,10 +1,11 @@
 {
-  "title": "lake1 \u2014 RTX PRO 5000 + Strata DeepSeek",
+  "title": "lake1 \u2014 RTX PRO 5000 + Strata",
   "uid": "lake1-strata",
-  "description": "RTX PRO 5000 Blackwell, Strata (DeepSeek V4.1 Flash 1017) and host telemetry for lake1. airouter alias `big`, ../claude-local.",
+  "description": "RTX PRO 5000 Blackwell, Strata (Qwen3.8-Flash-Next or DeepSeek V4.1 Flash) and host telemetry for lake1. airouter alias `big`, ../claude-local.",
   "tags": [
     "lake1",
     "strata",
+    "qwen",
     "deepseek",
     "nvidia",
     "rtx-pro-5000",
@@ -1006,7 +1007,7 @@
     {
       "id": 14,
       "type": "row",
-      "title": "Strata \u2014 DeepSeek V4.1 Flash 1017, ISTA-DAS 2.25 bpw, 256k ctx (strata-deepseek)",
+      "title": "Strata \u2014 Qwen3.8-Flash-Next IQ3_S (strata-qwen) or DeepSeek V4.1 Flash 2.25 bpw (strata-deepseek), 256k ctx",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1264,7 +1265,7 @@
       "id": 19,
       "type": "stat",
       "title": "MODEL LOADED",
-      "description": "1 = DeepSeek is loaded and answering. 0 / no data: strata-deepseek is stopped (lake1-gpu media) or still loading (~95 s).",
+      "description": "1 = the model is loaded and answering. 0 / no data: both Strata units are stopped (lake1-gpu media) or one is still loading (Qwen ~30 s, DeepSeek ~95 s).",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1439,7 +1440,7 @@
       "id": 22,
       "type": "stat",
       "title": "WAITING",
-      "description": "Strata answers one request at a time; non-zero means requests are queueing (e.g. a long prompt is being read).",
+      "description": "Requests waiting for a free slot. Qwen (DFlash2 drafting) answers one at a time; DeepSeek runs --parallel 3. Non-zero means requests are queueing.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1500,7 +1501,7 @@
       "id": 23,
       "type": "timeseries",
       "title": "SPEED",
-      "description": "Counter-derived. Decode (right axis, ~10-40 tok/s) would sit flat at the bottom of the prefill scale (~1k tok/s). The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.",
+      "description": "Counter-derived. Decode (right axis: DeepSeek ~10-40, Qwen ~120-270 tok/s) would sit flat at the bottom of the prefill scale (~1-4k tok/s). The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"
@@ -1921,7 +1922,7 @@
       "id": 27,
       "type": "timeseries",
       "title": "STRATA RAM",
-      "description": "System RAM held by strata-deepseek.service, by kind: the ~108 GB of experts the CPU computes, pinned buffers for GPU copies, and page cache of the model files (the kernel reclaims that first). Compare with all used RAM: lab VMs and Docker labs need ~93 GB, more than is left while DeepSeek is loaded, so experts would then be read from the SSD. Needs strata-memory.service on lake1.",
+      "description": "System RAM held by the running Strata unit (strata-qwen or strata-deepseek), by kind: the experts the CPU computes (~108 GB for DeepSeek, far less for Qwen, which keeps ~85% of its experts on the GPU), pinned buffers for GPU copies and the off-GPU context, and page cache of the model files (the kernel reclaims that first). Compare with all used RAM: lab VMs and Docker labs need ~93 GB, more than is left while DeepSeek is loaded, so its experts would then be read from the SSD. Needs strata-memory.service on lake1.",
       "datasource": {
         "type": "prometheus",
         "uid": "dfr1d9ottv8xsc"

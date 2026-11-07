@@ -25,14 +25,16 @@ HOSTS = {
               "description": "RTX PRO 5000 Blackwell, llama-server (../claude-local) and host "
                              "telemetry for lake1. Companion to the DGX Spark vLLM dashboard.",
               "tags": ["lake1", "llama.cpp", "nvidia", "rtx-pro-5000", "claude-local"],
-              # --engine strata: DeepSeek V4.1 Flash 1017 via Strata (strata-deepseek.service, :8091)
-              # since 2026-11-06; replaced the Qwen3.8-27B llama-server. Strata serves
-              # llama.cpp-compatible counters plus strata:* at /metrics/prometheus.
-              "strata": {"model": "DeepSeek V4.1 Flash 1017, ISTA-DAS 2.25 bpw, 256k ctx (strata-deepseek)",
-                         "title": "lake1 — RTX PRO 5000 + Strata DeepSeek", "uid": "lake1-strata",
-                         "description": "RTX PRO 5000 Blackwell, Strata (DeepSeek V4.1 Flash 1017) and host "
+              # --engine strata: Strata on :8091 since 2026-11-06 (replaced the Qwen3.8-27B
+              # llama-server). One of two units at a time, switched by lake1-gpu:
+              # strata-qwen (Qwen3.8-Flash-Next IQ3_S, default since 2026-11-07) or
+              # strata-deepseek (DeepSeek V4.1 Flash 1017). Strata serves llama.cpp-compatible
+              # counters plus strata:* at /metrics/prometheus.
+              "strata": {"model": "Qwen3.8-Flash-Next IQ3_S (strata-qwen) or DeepSeek V4.1 Flash 2.25 bpw (strata-deepseek), 256k ctx",
+                         "title": "lake1 — RTX PRO 5000 + Strata", "uid": "lake1-strata",
+                         "description": "RTX PRO 5000 Blackwell, Strata (Qwen3.8-Flash-Next or DeepSeek V4.1 Flash) and host "
                                         "telemetry for lake1. airouter alias `big`, ../claude-local.",
-                         "tags": ["lake1", "strata", "deepseek", "nvidia", "rtx-pro-5000", "claude-local"]}},
+                         "tags": ["lake1", "strata", "qwen", "deepseek", "nvidia", "rtx-pro-5000", "claude-local"]}},
     # GB10: unified memory, so nvidia-smi reports no VRAM, no fan and no power limit.
     "gx10": {"gpu": "GB10", "vram": False,
              "llama": "Qwen3.8-Flash-Next IQ3_S, no MTP (~/llama-flashnext.log)",
@@ -295,15 +297,15 @@ def strata_row():
          w=3, thresholds=[{"color": RED, "value": None}, {"color": AMBER, "value": 40},
                           {"color": GREEN, "value": 70}])
     stat("MODEL LOADED", f"max({S}model_loaded) or vector(0)", "short", w=3,
-         desc="1 = DeepSeek is loaded and answering. 0 / no data: strata-deepseek is stopped "
-              "(lake1-gpu media) or still loading (~95 s).",
+         desc="1 = the model is loaded and answering. 0 / no data: both Strata units are stopped "
+              "(lake1-gpu media) or one is still loading (Qwen ~30 s, DeepSeek ~95 s).",
          thresholds=[{"color": RED, "value": None}, {"color": GREEN, "value": 1}])
     stat("REQUESTS", f"sum(increase({S}requests_total[$__range])) or vector(0)", "short", w=3,
          desc="Requests answered in the selected time range.")
     stat("PROCESSING", f"sum({L}requests_processing) or vector(0)", "short", w=3)
     stat("WAITING", f"sum({L}requests_deferred) or vector(0)", "short", w=3,
-         desc="Strata answers one request at a time; non-zero means requests are queueing "
-              "(e.g. a long prompt is being read).",
+         desc="Requests waiting for a free slot. Qwen (DFlash2 drafting) answers one at a time; "
+              "DeepSeek runs --parallel 3. Non-zero means requests are queueing.",
          thresholds=[{"color": GREEN, "value": None}, {"color": AMBER, "value": 1}])
     y[0] += 4
 
@@ -315,8 +317,8 @@ def strata_row():
          f"clamp_min(sum(rate({L}prompt_seconds_total[$__rate_interval])), 0.001)",
          "prefill tok/s")], "short",
        colors={"prefill tok/s": BLUE, "decode tok/s": GREEN}, right=("decode tok/s",),
-       desc="Counter-derived. Decode (right axis, ~10-40 tok/s) would sit flat at the bottom of the "
-            "prefill scale (~1k tok/s). The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.")
+       desc="Counter-derived. Decode (right axis: DeepSeek ~10-40, Qwen ~120-270 tok/s) would sit "
+            "flat at the bottom of the prefill scale (~1-4k tok/s). The llamacpp:*_tokens_seconds gauges read 0 whenever the server is idle.")
     ts("PROMPT TOKENS: REUSED vs READ",
        [(f"sum(rate({L}prompt_tokens_cached_total[$__rate_interval])) or vector(0)", "reused/s"),
         (f"sum(rate({L}prompt_tokens_total[$__rate_interval])) or vector(0)", "read/s")],
@@ -350,11 +352,13 @@ def strata_row():
        "bytes", colors={"experts + buffers": GREEN, "pinned GPU staging": BLUE,
                         "model file cache": "#808080", "system used (all)": AMBER,
                         "system total": RED},
-       desc="System RAM held by strata-deepseek.service, by kind: the ~108 GB of experts the CPU "
-            "computes, pinned buffers for GPU copies, and page cache of the model files (the "
-            "kernel reclaims that first). Compare with all used RAM: lab VMs and Docker labs "
-            "need ~93 GB, more than is left while DeepSeek is loaded, so experts would then "
-            "be read from the SSD. Needs strata-memory.service on lake1.")
+       desc="System RAM held by the running Strata unit (strata-qwen or strata-deepseek), by kind: "
+            "the experts the CPU computes (~108 GB for DeepSeek, far less for Qwen, which keeps "
+            "~85% of its experts on the GPU), pinned buffers for GPU copies and the off-GPU "
+            "context, and page cache of the model files (the kernel reclaims that first). "
+            "Compare with all used RAM: lab VMs and Docker labs need ~93 GB, more than is left "
+            "while DeepSeek is loaded, so its experts would then be read from the SSD. "
+            "Needs strata-memory.service on lake1.")
     ts("TOOL CALLS / DRAFTER",
        [(f"sum(rate({S}tool_args_repaired_total[$__rate_interval])) * 60 or vector(0)", "tool args repaired/min"),
         (f"sum(rate({S}tool_calls_unread_total[$__rate_interval])) * 60 or vector(0)", "tool calls unread/min"),
