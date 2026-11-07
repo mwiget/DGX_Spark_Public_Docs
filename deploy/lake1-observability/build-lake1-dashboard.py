@@ -353,8 +353,8 @@ def strata_row():
                         "model file cache": "#808080", "system used (all)": AMBER,
                         "system total": RED},
        desc="System RAM held by the running Strata unit (strata-qwen or strata-deepseek), by kind: "
-            "the experts the CPU computes (~108 GB for DeepSeek, far less for Qwen, which keeps "
-            "~85% of its experts on the GPU), pinned buffers for GPU copies and the off-GPU "
+            "the experts in RAM (~108 GB for DeepSeek, ~52 GB for Qwen, which also keeps ~38 GB "
+            "of them on the GPU), pinned buffers for GPU copies and the off-GPU "
             "context, and page cache of the model files (the kernel reclaims that first). "
             "Compare with all used RAM: lab VMs and Docker labs need ~93 GB, more than is left "
             "while DeepSeek is loaded, so its experts would then be read from the SSD. "
